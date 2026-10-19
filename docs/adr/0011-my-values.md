@@ -16,7 +16,10 @@ The only way to disagree with a price was to upload a projections CSV for the wh
 
 ## Decision
 
-- On the player on the block, under his price, a "My value" box sets his price for this user. Clear sets that one player back to the data's price. There is deliberately no "clear all": values are changed one player at a time. League setup shows how many players the user has priced.
+- Dollar values only, never stats. Two places to set one, both changing a single player:
+  - **On the board:** the Value column is editable like a spreadsheet. Click a value (or Tab to it and press Enter), type, and Enter or Tab saves it and moves to the next row (Shift goes back). Escape cancels, and emptying the box clears that player's value. A refused value keeps the box open on him. Visiting a value without changing it sets nothing. Clicking a value doesn't put the player on the block.
+  - **On the card:** for the player on the block, a "My value" box under his price.
+- On the card, Clear sets that one player back to the data's price. There is deliberately no "clear all": values are changed one player at a time. League setup shows how many players the user has priced.
 - He takes that price, and everyone else shares the rest of the money by the usual method, so the total is still exactly teams × budget. A user can price a player outside the top 156; he then takes a roster spot from the lowest-ranked player.
 - Live, his price stays at the user's value and doesn't move with inflation. Bid to isn't tilted by roster fit for him, because the user's value already says what he's worth to them.
 - Limits: a whole dollar of at least $1, no more than any team could bid, and the user's values together must leave $1 for every other roster spot.

@@ -228,31 +228,88 @@ $('reset-draft').addEventListener('click', () => {
 });
 
 // ---------- my values (ADR 0011) ----------
-$('my-value-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const id = state.selected;
-  const n = Number($('my-value').value);
+// Sets one player's dollar value (never his stats); everyone else re-prices
+// around it. Returns false, with the reason shown, when it can't.
+function setMyValue(id, n) {
   const l = state.league;
   const most = l.budget - l.rosterSize + 1; // the most any one team can bid
   const others = Object.entries(state.myValues).filter(([k]) => k !== id);
   const room = myValueRoom(l, others.length + 1) - others.reduce((a, [, v]) => a + v, 0);
-  if (!id || !Number.isInteger(n) || n < 1) return logMsg('Enter a whole-dollar value of $1 or more.', 'error');
+  if (!id || !Number.isInteger(n) || n < 1) return logMsg('Enter a whole-dollar value of $1 or more.', 'error'), false;
   if (n > Math.min(most, room)) {
-    return logMsg(n > most ? `No team can bid more than ${money(most)} in this league.` : `Your values would leave less than $1 for other roster spots. The most you can set here is ${money(room)}.`, 'error');
+    return logMsg(n > most ? `No team can bid more than ${money(most)} in this league.` : `Your values would leave less than $1 for other roster spots. The most you can set here is ${money(room)}.`, 'error'), false;
   }
   state.myValues = { ...state.myValues, [id]: n };
   save();
   render();
   renderMyValuesStatus();
   logMsg(`Set your value for ${getValued().find((p) => p.id === id)?.name ?? 'him'} to ${money(n)}. Other prices were re-shared around it.`);
-});
-$('my-value-clear').addEventListener('click', () => {
-  const { [state.selected]: _, ...rest } = state.myValues;
+  return true;
+}
+function clearMyValue(id) {
+  const { [id]: _, ...rest } = state.myValues;
   state.myValues = rest;
   save();
   render();
   renderMyValuesStatus();
-  logMsg('Cleared your value. He is priced from the data again.');
+  logMsg(`Cleared your value for ${getValued().find((p) => p.id === id)?.name ?? 'him'}. He is priced from the data again.`);
+}
+$('my-value-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  setMyValue(state.selected, Number($('my-value').value));
+});
+$('my-value-clear').addEventListener('click', () => clearMyValue(state.selected));
+
+// Editing the Value column right on the board, like a spreadsheet: click or
+// press Enter on a value, type, then Enter or Tab saves and moves to the next
+// row (Shift goes back), Escape cancels, and an emptied box clears it.
+const valueCell = (id) => $('players-body').querySelector(`tr[data-id="${CSS.escape(id)}"] td.val[data-edit]`);
+function editValueCell(target) {
+  if (target.querySelector('input')) return;
+  const id = target.closest('tr').dataset.id;
+  // Close any other open box first; saving it re-renders the board.
+  $('players-body').querySelector('td.val input')?.blur();
+  const td = valueCell(id);
+  if (!td) return;
+  const p = getValued().find((x) => x.id === id);
+  if (!p) return;
+  const start = p.mine || p.value >= 0.5 ? String(Math.round(p.value)) : '';
+  const input = el('input', { type: 'number', min: 1, step: 1, value: start, 'aria-label': `My value for ${p.name}` });
+  td.replaceChildren(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (move) => {
+    if (done) return;
+    done = true;
+    // The next row is found before saving, as saving can re-sort the board.
+    const rows = [...$('players-body').querySelectorAll('td.val[data-edit]')];
+    const next = move ? rows[rows.indexOf(td) + move]?.closest('tr').dataset.id : null;
+    const text = input.value.trim();
+    if (text === start) render(); // unchanged: never pins a player just for visiting him
+    else if (!text) (p.mine ? clearMyValue(id) : render());
+    else if (!setMyValue(id, Number(text))) {
+      // Refused (the reason is shown): stay on him to fix it, unless he clicked away.
+      render();
+      if (move && valueCell(id)) editValueCell(valueCell(id));
+      return;
+    }
+    if (next && valueCell(next)) editValueCell(valueCell(next));
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      done = true;
+      e.preventDefault();
+      render();
+      valueCell(id)?.focus();
+    }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); finish(e.shiftKey ? -1 : 1); }
+  });
+  input.addEventListener('blur', () => finish(0));
+}
+$('players-body').addEventListener('keydown', (e) => {
+  const td = e.target.closest?.('td.val[data-edit]');
+  if (td && e.target === td && (e.key === 'Enter' || e.key === 'F2')) { e.preventDefault(); editValueCell(td); }
 });
 
 $('csv-file').addEventListener('change', async (e) => {
@@ -369,6 +426,12 @@ $('log-form').addEventListener('invalid', (e) => {
 $('players-body').addEventListener('mousedown', (e) => {
   const tr = e.target.closest('tr[data-id]');
   if (!tr || e.button !== 0) return;
+  // The Value cell edits that player's dollar value instead (ADR 0011).
+  const valueCell = e.target.closest('td.val[data-edit]');
+  if (valueCell) {
+    if (e.target.tagName !== 'INPUT') { e.preventDefault(); editValueCell(valueCell); }
+    return;
+  }
   e.preventDefault(); // focus moves to the price box below, not to the row
   const { board, live, me } = derive();
   const p = board.find((x) => x.id === tr.dataset.id);
@@ -473,7 +536,9 @@ function renderBoard({ v, board, live, me, fit, repriced }) {
       el('span', { class: 'nm' }, p.name), el('span', { class: 'meta' }, teamLabel(p)),
       p.added ? el('span', { class: 'tag', title: 'On a 2026-27 roster, with no 2025-26 stats to value' }, p.rookie ? 'Rookie' : 'No 2025-26 stats')
         : !p.z ? el('span', { class: 'tag', title: `Played fewer than the ${state.league.minGames} games needed to be valued` }, `${p.gp} GP`) : null),
-    el('td', { class: p.mine ? 'val mine' : 'val', title: p.mine ? 'Your value' : null }, p.value >= 0.5 ? money(p.value) : '—'),
+    p.z && !pick
+      ? el('td', { class: p.mine ? 'val mine' : 'val', 'data-edit': '', tabindex: 0, title: p.mine ? 'Your value. Click to change; empty it to clear.' : 'Click to set your own value' }, p.value >= 0.5 ? money(p.value) : '—')
+      : el('td', { class: p.mine ? 'val mine' : 'val' }, p.value >= 0.5 ? money(p.value) : '—'),
     liveCell,
     el('td', { class: relit ? 'bid relit' : 'bid' }, bid ? money(bid) : ''),
     ...cats().map((c, i) => (p.z
