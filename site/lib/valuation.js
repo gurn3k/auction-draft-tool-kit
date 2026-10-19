@@ -79,9 +79,24 @@ export function allocate(ranked, slots, money) {
   return prices;
 }
 
+// Players the user has priced themselves (ADR 0011) take that price first and
+// the rest share what's left, so the total still spends exactly the money.
+function allocateWithMine(ranked, slots, money, mine) {
+  const pinned = ranked.filter((p) => mine.has(p.id)).slice(0, Math.max(0, slots));
+  if (!pinned.length) return allocate(ranked, slots, money);
+  const fixed = pinned.reduce((a, p) => a + mine.get(p.id), 0);
+  const prices = allocate(ranked.filter((p) => !mine.has(p.id)), slots - pinned.length, money - fixed);
+  for (const p of pinned) prices.set(p.id, mine.get(p.id));
+  return prices;
+}
+
+// The most a user may set, in total, for `count` players, leaving $1 for every
+// other roster spot in the league.
+export const myValueRoom = (league, count) => league.teams * league.budget - (rosterSpots(league) - count);
+
 // Pre-draft values. Returns every eligible player, best first, with per-category
 // z-scores, a total and a dollar value (0 for players outside the rostered pool).
-export function valuePlayers(players, league, { categories = CATEGORIES } = {}) {
+export function valuePlayers(players, league, { categories = CATEGORIES, myValues = {} } = {}) {
   const eligible = players.filter((p) => p.gp >= league.minGames);
   const slots = rosterSpots(league);
   // The averages that z-scores compare against should describe the players who
@@ -93,8 +108,9 @@ export function valuePlayers(players, league, { categories = CATEGORIES } = {}) 
     scored = scorePool(eligible, pool, categories).sort((a, b) => b.total - a.total);
     pool = scored.slice(0, slots);
   }
-  const prices = allocate(scored, slots, league.teams * league.budget);
-  return scored.map((p, i) => ({ ...p, rank: i + 1, value: prices.get(p.id) ?? 0 }));
+  const mine = new Map(scored.filter((p) => myValues[p.id] >= 1).map((p) => [p.id, myValues[p.id]]));
+  const prices = allocateWithMine(scored, slots, league.teams * league.budget, mine);
+  return scored.map((p, i) => ({ ...p, rank: i + 1, value: prices.get(p.id) ?? 0, ...(mine.has(p.id) ? { mine: true } : {}) }));
 }
 
 // Re-prices the players still available once some have been bought. The money
@@ -106,7 +122,9 @@ export function livePrices(valued, picks, league) {
   const slotsLeft = rosterSpots(league) - picks.length;
   const moneyLeft = league.teams * league.budget - spent;
   const available = valued.filter((p) => !drafted.has(p.id));
-  const prices = allocate(available, slotsLeft, moneyLeft);
+  // A value the user set stays where they set it; it doesn't move with inflation.
+  const mine = new Map(available.filter((p) => p.mine).map((p) => [p.id, p.value]));
+  const prices = allocateWithMine(available, slotsLeft, moneyLeft, mine);
   // Inflation compares what the remaining money buys now with what the same
   // players were worth before the draft.
   const baseline = available.slice(0, Math.max(0, slotsLeft)).reduce((a, p) => a + p.value, 0);

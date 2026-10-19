@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CATEGORIES, YAHOO_DEFAULTS, allocate, livePrices, valuePlayers } from '../site/lib/valuation.js';
+import { CATEGORIES, YAHOO_DEFAULTS, allocate, livePrices, rosterSpots, valuePlayers } from '../site/lib/valuation.js';
 
 const data = JSON.parse(readFileSync(new URL('../site/data/players.json', import.meta.url), 'utf8'));
 
@@ -104,4 +104,27 @@ test('a player note is context only: it never changes a price (ADR 0010)', () =>
   const a = valuePlayers(data.players, YAHOO_DEFAULTS);
   const b = new Map(valuePlayers(plain, YAHOO_DEFAULTS).map((p) => [p.id, p.value]));
   for (const p of a) assert.equal(p.value, b.get(p.id));
+});
+
+test('a value the user sets is kept, and everyone else shares exactly the rest (ADR 0011)', () => {
+  const base = valuePlayers(data.players, YAHOO_DEFAULTS);
+  const [star, , , mid] = base;
+  const deep = base[300];
+  const myValues = { [star.id]: 20, [deep.id]: 5 };
+  const v = valuePlayers(data.players, YAHOO_DEFAULTS, { myValues });
+  const get = (id) => v.find((p) => p.id === id);
+  assert.equal(get(star.id).value, 20);
+  assert.equal(get(deep.id).value, 5); // outside the rostered pool, but priced by the user
+  assert.ok(get(star.id).mine && !get(mid.id).mine);
+  assert.ok(get(mid.id).value > mid.value); // the money freed up goes to others
+  const priced = v.filter((p) => p.value > 0);
+  assert.equal(priced.length, rosterSpots(YAHOO_DEFAULTS));
+  assert.ok(Math.abs(priced.reduce((a, p) => a + p.value, 0) - YAHOO_DEFAULTS.teams * YAHOO_DEFAULTS.budget) < 1e-6);
+  // Live, it stays put while the rest re-share the money left.
+  const live = livePrices(v, [{ playerId: mid.id, price: 90, team: 1 }], YAHOO_DEFAULTS);
+  assert.equal(live.prices.get(star.id), 20);
+  const total = [...live.prices.values()].reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(total - live.moneyLeft) < 1e-6);
+  // Values for players who aren't on the board are ignored.
+  assert.deepEqual(valuePlayers(data.players, YAHOO_DEFAULTS, { myValues: { nobody: 50 } }).map((p) => p.value), base.map((p) => p.value));
 });
