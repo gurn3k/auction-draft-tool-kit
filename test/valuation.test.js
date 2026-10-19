@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CATEGORIES, YAHOO_DEFAULTS, allocate, livePrices, rosterSpots, valuePlayers } from '../site/lib/valuation.js';
+import { CATEGORIES, YAHOO_DEFAULTS, allocate, livePrices, valuePlayers } from '../site/lib/valuation.js';
 
 const data = JSON.parse(readFileSync(new URL('../site/data/players.json', import.meta.url), 'utf8'));
 
@@ -24,9 +24,7 @@ test('every rostered player is worth at least $1, and values fall with rank', ()
   const v = valuePlayers(data.players, YAHOO_DEFAULTS);
   const rostered = v.slice(0, 156);
   assert.ok(rostered.every((p) => p.value >= 1));
-  // Hand-set values (ADR 0010) are the deliberate exception to rank order.
-  const computed = rostered.filter((p) => !p.setValue);
-  for (let i = 1; i < computed.length; i++) assert.ok(computed[i].value <= computed[i - 1].value);
+  for (let i = 1; i < rostered.length; i++) assert.ok(rostered[i].value <= rostered[i - 1].value);
 });
 
 test('values scale with the budget the commissioner sets', () => {
@@ -99,21 +97,11 @@ test('live prices still share out all the money left', () => {
   assert.ok(Math.abs(total - live.moneyLeft) < 1e-6);
 });
 
-test('a hand-set value is kept, and everyone else still shares exactly the rest (ADR 0010)', () => {
-  const data = JSON.parse(readFileSync(new URL('../site/data/players.json', import.meta.url), 'utf8'));
-  const v = valuePlayers(data.players, YAHOO_DEFAULTS);
-  const set = v.filter((p) => p.setValue);
-  assert.ok(set.length > 0);
-  for (const p of set) assert.equal(p.value, p.setValue.value);
-  const priced = v.filter((p) => p.value >= 1);
-  assert.equal(priced.length, rosterSpots(YAHOO_DEFAULTS));
-  assert.equal(Math.round(priced.reduce((a, p) => a + p.value, 0)), YAHOO_DEFAULTS.teams * YAHOO_DEFAULTS.budget);
-  // It scales with the budget, and stays put as the room inflates.
-  const half = valuePlayers(data.players, { ...YAHOO_DEFAULTS, budget: 100 });
-  assert.equal(half.find((p) => p.id === set[0].id).value, Math.round(set[0].setValue.value / 2));
-  const picks = [{ playerId: v[0].id, price: 120, team: 1 }];
-  const live = livePrices(v, picks, YAHOO_DEFAULTS);
-  assert.equal(live.prices.get(set[0].id), set[0].value);
-  const total = [...live.prices.values()].reduce((a, b) => a + b, 0);
-  assert.equal(Math.round(total), live.moneyLeft);
+test('a player note is context only: it never changes a price (ADR 0010)', () => {
+  const noted = data.players.filter((p) => p.note);
+  assert.ok(noted.length > 0);
+  const plain = data.players.map(({ note, ...p }) => p);
+  const a = valuePlayers(data.players, YAHOO_DEFAULTS);
+  const b = new Map(valuePlayers(plain, YAHOO_DEFAULTS).map((p) => [p.id, p.value]));
+  for (const p of a) assert.equal(p.value, b.get(p.id));
 });
