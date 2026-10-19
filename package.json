@@ -1,0 +1,16 @@
+{
+  "name": "auction-draft-tool-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Suggests auction dollar values for Yahoo fantasy basketball salary cap drafts, re-priced live as players come off the board.",
+  "engines": {
+    "node": ">=22.9"
+  },
+  "scripts": {
+    "fetch": "node --env-file-if-exists=.env.local scripts/fetch-stats.js",
+    "serve": "node scripts/serve.js",
+    "test": "node --test test/*.test.js"
+  },
+  "license": "UNLICENSED"
+}

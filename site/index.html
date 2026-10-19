@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cap Drafter</title>
+  <meta name="description" content="Auction dollar values for Yahoo fantasy basketball salary cap drafts, set to your league's budget and re-priced live as players are bought.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <a class="wordmark" href="./"><svg class="mark" viewBox="0 0 13 13" shape-rendering="crispEdges" aria-hidden="true"><rect x="4" y="0" width="5" height="1"></rect><rect x="2" y="1" width="2" height="1"></rect><rect x="6" y="1" width="1" height="1"></rect><rect x="9" y="1" width="2" height="1"></rect><rect x="1" y="2" width="2" height="1"></rect><rect x="6" y="2" width="1" height="1"></rect><rect x="10" y="2" width="2" height="1"></rect><rect x="1" y="3" width="1" height="1"></rect><rect x="3" y="3" width="1" height="1"></rect><rect x="6" y="3" width="1" height="1"></rect><rect x="9" y="3" width="1" height="1"></rect><rect x="11" y="3" width="1" height="1"></rect><rect x="0" y="4" width="1" height="1"></rect><rect x="3" y="4" width="1" height="1"></rect><rect x="6" y="4" width="1" height="1"></rect><rect x="9" y="4" width="1" height="1"></rect><rect x="12" y="4" width="1" height="1"></rect><rect x="0" y="5" width="1" height="1"></rect><rect x="3" y="5" width="1" height="1"></rect><rect x="6" y="5" width="1" height="1"></rect><rect x="9" y="5" width="1" height="1"></rect><rect x="12" y="5" width="1" height="1"></rect><rect x="0" y="6" width="13" height="1"></rect><rect x="0" y="7" width="1" height="1"></rect><rect x="3" y="7" width="1" height="1"></rect><rect x="6" y="7" width="1" height="1"></rect><rect x="9" y="7" width="1" height="1"></rect><rect x="12" y="7" width="1" height="1"></rect><rect x="0" y="8" width="1" height="1"></rect><rect x="3" y="8" width="1" height="1"></rect><rect x="6" y="8" width="1" height="1"></rect><rect x="9" y="8" width="1" height="1"></rect><rect x="12" y="8" width="1" height="1"></rect><rect x="1" y="9" width="1" height="1"></rect><rect x="3" y="9" width="1" height="1"></rect><rect x="6" y="9" width="1" height="1"></rect><rect x="9" y="9" width="1" height="1"></rect><rect x="11" y="9" width="1" height="1"></rect><rect x="1" y="10" width="2" height="1"></rect><rect x="6" y="10" width="1" height="1"></rect><rect x="10" y="10" width="2" height="1"></rect><rect x="2" y="11" width="2" height="1"></rect><rect x="6" y="11" width="1" height="1"></rect><rect x="9" y="11" width="2" height="1"></rect><rect x="4" y="12" width="5" height="1"></rect></svg>Cap Drafter</a>
+      <p class="tagline">Auction values for Yahoo fantasy basketball salary cap drafts</p>
+      <span class="maker top">Built by <a href="https://www.gurn3k.com" aria-label="gurn3k"><svg class="gurn3k" viewBox="100 100 705 190" aria-hidden="true"><g transform="translate(100 -754)"><g class="g-gurn" shape-rendering="crispEdges"><rect x="31.8" y="887.0" width="48.0" height="12"></rect><rect x="103.8" y="887.0" width="24.0" height="12"></rect><rect x="139.8" y="887.0" width="36.0" height="12"></rect><rect x="211.8" y="887.0" width="36.0" height="12"></rect><rect x="271.8" y="887.0" width="24.0" height="12"></rect><rect x="319.8" y="887.0" width="12.0" height="12"></rect><rect x="343.8" y="887.0" width="24.0" height="12"></rect><rect x="391.8" y="887.0" width="36.0" height="12"></rect><rect x="19.8" y="899.0" width="72.0" height="12"></rect><rect x="103.8" y="899.0" width="24.0" height="12"></rect><rect x="139.8" y="899.0" width="36.0" height="12"></rect><rect x="211.8" y="899.0" width="36.0" height="12"></rect><rect x="271.8" y="899.0" width="60.0" height="12"></rect><rect x="343.8" y="899.0" width="24.0" height="12"></rect><rect x="379.8" y="899.0" width="60.0" height="12"></rect><rect x="7.8" y="911.0" width="48.0" height="12"></rect><rect x="79.8" y="911.0" width="48.0" height="12"></rect><rect x="139.8" y="911.0" width="36.0" height="12"></rect><rect x="211.8" y="911.0" width="36.0" height="12"></rect><rect x="271.8" y="911.0" width="48.0" height="12"></rect><rect x="343.8" y="911.0" width="48.0" height="12"></rect><rect x="403.8" y="911.0" width="48.0" height="12"></rect><rect x="7.8" y="923.0" width="36.0" height="12"></rect><rect x="91.8" y="923.0" width="36.0" height="12"></rect><rect x="139.8" y="923.0" width="36.0" height="12"></rect><rect x="211.8" y="923.0" width="36.0" height="12"></rect><rect x="271.8" y="923.0" width="36.0" height="12"></rect><rect x="343.8" y="923.0" width="36.0" height="12"></rect><rect x="415.8" y="923.0" width="36.0" height="12"></rect><rect x="7.8" y="935.0" width="36.0" height="12"></rect><rect x="91.8" y="935.0" width="36.0" height="12"></rect><rect x="139.8" y="935.0" width="36.0" height="12"></rect><rect x="211.8" y="935.0" width="36.0" height="12"></rect><rect x="271.8" y="935.0" width="24.0" height="12"></rect><rect x="343.8" y="935.0" width="36.0" height="12"></rect><rect x="415.8" y="935.0" width="36.0" height="12"></rect><rect x="7.8" y="947.0" width="36.0" height="12"></rect><rect x="91.8" y="947.0" width="36.0" height="12"></rect><rect x="139.8" y="947.0" width="36.0" height="12"></rect><rect x="211.8" y="947.0" width="36.0" height="12"></rect><rect x="271.8" y="947.0" width="24.0" height="12"></rect><rect x="343.8" y="947.0" width="36.0" height="12"></rect><rect x="415.8" y="947.0" width="36.0" height="12"></rect><rect x="7.8" y="959.0" width="36.0" height="12"></rect><rect x="91.8" y="959.0" width="36.0" height="12"></rect><rect x="139.8" y="959.0" width="36.0" height="12"></rect><rect x="211.8" y="959.0" width="36.0" height="12"></rect><rect x="271.8" y="959.0" width="24.0" height="12"></rect><rect x="343.8" y="959.0" width="36.0" height="12"></rect><rect x="415.8" y="959.0" width="36.0" height="12"></rect><rect x="19.8" y="971.0" width="108.0" height="12"></rect><rect x="151.8" y="971.0" width="96.0" height="12"></rect><rect x="271.8" y="971.0" width="24.0" height="12"></rect><rect x="343.8" y="971.0" width="36.0" height="12"></rect><rect x="415.8" y="971.0" width="36.0" height="12"></rect><rect x="19.8" y="983.0" width="108.0" height="12"></rect><rect x="151.8" y="983.0" width="60.0" height="12"></rect><rect x="223.8" y="983.0" width="24.0" height="12"></rect><rect x="271.8" y="983.0" width="24.0" height="12"></rect><rect x="343.8" y="983.0" width="36.0" height="12"></rect><rect x="415.8" y="983.0" width="36.0" height="12"></rect><rect x="91.8" y="995.0" width="36.0" height="12"></rect><rect x="163.8" y="995.0" width="36.0" height="12"></rect><rect x="79.8" y="1007.0" width="36.0" height="12"></rect><rect x="31.8" y="1019.0" width="84.0" height="12"></rect><rect x="31.8" y="1031.0" width="60.0" height="12"></rect></g><path class="g-3k" d="M518.80 1003.80L518.80 1003.80Q501.80 1003.80 489.30 997.50Q476.80 991.20 470.20 980.40Q463.60 969.60 463.60 956L463.60 956L495.20 956Q495.20 965.20 501.40 970.90Q507.60 976.60 518.80 976.60L518.80 976.60Q526.20 976.60 531.40 973.80Q536.60 971 539.40 966.10Q542.20 961.20 542.20 955L542.20 955Q542.20 945.40 536.10 939.20Q530.00 933 518.80 933L518.80 933Q512.80 933 508.30 934.80Q503.80 936.60 500.60 939.20L500.60 939.20L485.80 914.20L530.00 885.40L528.20 882L469.60 882L469.60 854L568.00 854L568.00 884.40L517.00 916.80L501.00 912.40Q505.00 911.20 509.50 910.50Q514.00 909.80 519.20 909.80L519.20 909.80Q536.20 909.80 548.40 915.40Q560.60 921 567.30 931.10Q574.00 941.20 574.00 954.60L574.00 954.60L574.00 957Q574.00 970.40 567.30 981Q560.60 991.60 548.30 997.70Q536.00 1003.80 518.80 1003.80ZM705 1000L669 1000L634.40 948.80L619 948.80L663.60 890.40L697.20 890.40L655.20 944.80L655.60 929.20L705 1000ZM623.80 1000L591.80 1000L591.80 854L623.80 854L623.80 1000Z"/></g></svg></a></span>
+    </div>
+  </header>
+
+  <main>
+    <details class="setup" id="setup" open>
+      <summary><span>League setup</span><span class="setup-sum" id="setup-sum"></span></summary>
+      <form class="setup-grid" id="setup-form">
+        <label>Budget per team <span class="hint">set by your commissioner</span>
+          <span class="money-input"><span aria-hidden="true">$</span><input name="budget" type="number" min="1" max="2000" step="1" required></span>
+        </label>
+        <label>Teams <span class="hint">in your league</span>
+          <input name="teams" type="number" min="2" max="20" step="1" required>
+        </label>
+        <label>Roster spots <span class="hint">bought at auction, not IL</span>
+          <input name="rosterSize" type="number" min="1" max="25" step="1" required>
+        </label>
+        <label>Minimum games <span class="hint">last season, to be valued</span>
+          <input name="minGames" type="number" min="0" max="82" step="1" required>
+        </label>
+        <label>My team <span class="hint">the one you bid for</span>
+          <select name="myTeam" id="my-team-select"></select>
+        </label>
+        <fieldset class="source">
+          <legend>Player data</legend>
+          <label class="radio"><input type="radio" name="source" value="bundled" checked> <span id="bundled-label">2025-26 per-game stats</span></label>
+          <label class="radio"><input type="radio" name="source" value="csv" id="source-csv"> My projections (CSV)</label>
+          <div class="csv-row">
+            <input type="file" id="csv-file" accept=".csv,text/csv" aria-label="Projections CSV file">
+            <a href="data/projections-template.csv" download>Template</a>
+          </div>
+          <p class="csv-status" id="csv-status" role="status"></p>
+        </fieldset>
+        <fieldset class="cats-pick">
+          <legend>Categories <span class="hint">the ones your league scores</span></legend>
+          <div class="cats-boxes" id="cat-boxes"></div>
+        </fieldset>
+        <fieldset class="cats-pick fit-pick">
+          <legend>Worth to you</legend>
+          <label class="check"><input type="checkbox" name="fit" checked> Adjust Bid to for my roster’s needs</label>
+          <p class="hint fit-hint">Up to ±20% on Live, toward the categories you’re short in. It builds up as you fill your first half of the roster.</p>
+        </fieldset>
+        <div class="setup-actions">
+          <button type="button" class="quiet" id="yahoo-defaults">Yahoo defaults</button>
+          <button type="button" class="quiet danger" id="reset-draft">Reset draft</button>
+        </div>
+      </form>
+    </details>
+
+    <section class="ticker" aria-label="Draft status">
+      <div class="tick"><span class="tick-label">League money left</span><b id="t-money"></b><span class="tick-note" id="t-money-note"></span></div>
+      <div class="tick"><span class="tick-label">Spots left</span><b id="t-slots"></b><span class="tick-note" id="t-slots-note"></span></div>
+      <div class="tick"><span class="tick-label">Inflation</span><b id="t-infl"></b><span class="tick-note" id="t-infl-note"></span></div>
+      <div class="home">
+        <div class="tick me"><span class="tick-label">My budget</span><b id="t-mine"></b><span class="tick-note" id="t-mine-note"></span></div>
+        <div class="tick me"><span class="tick-label">My max bid</span><b id="t-max"></b><span class="tick-note" id="t-max-note"></span></div>
+      </div>
+    </section>
+
+    <section class="block" id="block" aria-labelledby="b-name">
+      <div class="b-player">
+        <div class="b-title"><h1 id="b-name"></h1><span class="b-meta" id="b-meta"></span></div>
+        <div class="b-cats" id="b-cats"></div>
+        <p class="b-scarce" id="b-scarce" hidden></p>
+        <p class="b-note" id="b-note"></p>
+      </div>
+      <div class="b-prices">
+        <div><span class="b-label">Pre-draft</span><b class="b-value" id="b-value"></b></div>
+        <div><span class="b-label">Live</span><b class="b-live" id="b-live"></b></div>
+      </div>
+      <div class="b-bid">
+        <span class="b-label">Bid to</span>
+        <b id="b-bid"></b>
+        <span class="b-bid-note" id="b-bid-note"></span>
+      </div>
+      <form class="log" id="log-form" autocomplete="off">
+        <label class="log-player">Player sold
+          <input id="log-player" list="player-options" placeholder="Start typing a name" required>
+          <datalist id="player-options"></datalist>
+        </label>
+        <label class="log-price">Price
+          <span class="money-input"><span aria-hidden="true">$</span><input id="log-price" type="number" min="1" step="1" required></span>
+        </label>
+        <label class="log-team">Bought by
+          <select id="log-team" required></select>
+        </label>
+        <button type="submit" class="primary">Log pick</button>
+        <p class="log-msg" id="log-msg" role="status"></p>
+      </form>
+    </section>
+
+    <section class="sold" aria-label="Recent sales" id="sold-strip" hidden></section>
+
+    <div class="layout">
+      <section class="board" aria-labelledby="board-title">
+        <div class="board-head">
+          <h2 id="board-title">Player board</h2>
+          <span class="board-count" id="board-count"></span>
+          <input type="search" id="search" placeholder="Nominated player? Type his name" aria-label="Find a player and put him on the block">
+          <label class="check"><input type="checkbox" id="show-drafted"> Show drafted</label>
+        </div>
+        <div class="table-wrap">
+          <table class="players" id="players">
+            <thead><tr id="players-head"></tr></thead>
+            <tbody id="players-body"></tbody>
+          </table>
+        </div>
+        <p class="board-note">
+          <b>Value</b> is the pre-draft price. <b>Live</b> re-prices the players left using the money and spots left.
+          <b>Bid to</b> is Live, adjusted up to ±20% for your roster’s category needs (switch this off in League setup), and capped at what you can afford. Category cells are z-scores against the players who get drafted: blue helps, red hurts.
+          Type a nominated player in the search box, or click his row, to put him on the block.
+        </p>
+      </section>
+
+      <aside class="side">
+        <div class="tabs" role="tablist" aria-label="Draft panels">
+          <button role="tab" id="tab-me" aria-controls="panel-me" aria-selected="true">My team</button>
+          <button role="tab" id="tab-teams" aria-controls="panel-teams" aria-selected="false">Teams</button>
+          <button role="tab" id="tab-picks" aria-controls="panel-picks" aria-selected="false">Picks <span id="pick-count"></span></button>
+        </div>
+        <div role="tabpanel" id="panel-me" aria-labelledby="tab-me"></div>
+        <div role="tabpanel" id="panel-teams" aria-labelledby="tab-teams" hidden></div>
+        <div role="tabpanel" id="panel-picks" aria-labelledby="tab-picks" hidden></div>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="colophon">
+    <div class="colophon-inner">
+      <p class="fine" id="data-note"></p>
+      <p class="fine">Not affiliated with or endorsed by Yahoo. Values are a guide to bidding, not a prediction.</p>
+      <div class="sig">
+        <span>© 2026 Gurnek Khaira</span>
+        <span class="maker">Built by <a href="https://www.gurn3k.com" aria-label="gurn3k"><span class="maker-mark"></span></a></span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

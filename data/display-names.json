@@ -1,0 +1,17 @@
+{
+  "_readme": "Hand-kept, read by scripts/fetch-stats.js. balldontlie lists some players by legal name; these are shown by the name fans know instead. The legal name stays searchable as an alias. Keys are balldontlie player ids.",
+  "names": {
+    "2221": "Nigel Hayes-Davis",
+    "666508": "Nic Claxton",
+    "17896031": "Bones Hyland",
+    "24102396": "Tre Scott",
+    "47738533": "Nate Williams",
+    "1028025235": "Bub Carrington",
+    "1028026508": "Ron Holland",
+    "1028028405": "Alex Sarr",
+    "1028245237": "David Jones García",
+    "1057260888": "Ace Bailey",
+    "1057275769": "Yang Hansen",
+    "1060015883": "Adama-Alpha Bal"
+  }
+}
