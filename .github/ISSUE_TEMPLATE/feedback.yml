@@ -1,0 +1,34 @@
+name: Feedback
+description: A bug, a confusing moment, or an idea for Cap Drafter
+title: "Feedback: "
+labels: ["feedback"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of feedback?
+      options:
+        - Something broke
+        - A price looked wrong
+        - Something was confusing
+        - An idea
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you saw. A screenshot helps.
+    validations:
+      required: true
+  - type: input
+    id: league
+    attributes:
+      label: League setup
+      description: Budget, teams, roster spots and categories, if they matter here.
+      placeholder: $200, 12 teams, 13 spots, 9-cat
+  - type: input
+    id: device
+    attributes:
+      label: Browser and device
+      placeholder: Chrome on Windows, Safari on iPhone…
