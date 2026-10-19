@@ -68,7 +68,8 @@ export function parseJson(raw) {
 }
 
 const INTENTS = new Set(['best', 'targets', 'weakest', 'afford', 'verdict', 'compare', 'player', 'cannot_answer', 'off_topic']);
-const CATEGORY_KEYS = new Set(['fg', 'ft', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'tov']);
+const CATEGORY_LABELS = { fg: 'FG%', ft: 'FT%', tpm: '3PM', pts: 'PTS', reb: 'REB', ast: 'AST', stl: 'STL', blk: 'BLK', tov: 'TO' };
+const CATEGORY_KEYS = new Set(Object.keys(CATEGORY_LABELS));
 const NUMBER_FIELDS = ['maxPrice', 'price', 'money', 'spots', 'count'];
 
 /**
@@ -133,6 +134,7 @@ export function runRequest(req, board) {
   const byCat = (c) => (a, b) => b.z[c.key] - a.z[c.key];
   const byWorth = (a, b) => b.bidTo - a.bidTo || b.live - a.live;
   const named = req.players.map((n) => resolve(n, board));
+  if (req.category && !cat && !['off_topic', 'cannot_answer'].includes(req.intent)) return reply(`Your league doesn't score ${CATEGORY_LABELS[req.category]}, so it isn't on this board.`);
 
   switch (req.intent) {
     case 'off_topic':

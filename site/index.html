@@ -126,6 +126,17 @@
 
     <section class="sold" aria-label="Recent sales" id="sold-strip" hidden></section>
 
+    <!-- Ask the board (ADR 0008). Hidden until the app knows it can reach /api/ask. -->
+    <section class="ask" id="ask" aria-labelledby="ask-title" hidden>
+      <form class="ask-form" id="ask-form" autocomplete="off">
+        <label class="b-label" id="ask-title" for="ask-q">Ask the board</label>
+        <input id="ask-q" maxlength="300" placeholder="e.g. Best shot-blocker left under $10?">
+        <button type="submit" class="primary" id="ask-go">Ask</button>
+      </form>
+      <div class="ask-answer" id="ask-answer" role="status" aria-live="polite"></div>
+      <p class="ask-fine">Answers come from this board: last season's stats and your draft. Only your question is sent, to be read by an AI model. <a href="https://fan-basketball-drafter.vercel.app/privacy.html">Privacy</a></p>
+    </section>
+
     <div class="layout">
       <section class="board" aria-labelledby="board-title">
         <div class="board-head">

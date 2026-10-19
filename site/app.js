@@ -5,6 +5,7 @@ import { SCARCE_LEFT, addPick, bidCeiling, categorySupply, categoryTotals, check
 import { projectionsFromCsv } from './lib/csv.js';
 import { fitDrivers, fitFactor, fitStrength, needWeights, worthToYou } from './lib/fit.js';
 import { findPlayer } from './lib/match.js';
+import { boardState, checkRequest, runRequest } from './lib/ask.js';
 
 const STORE = 'cap-drafter:v1';
 const $ = (id) => document.getElementById(id);
@@ -754,6 +755,46 @@ $('search').addEventListener('keydown', (e) => {
   $('log-price').focus();
 });
 $('show-drafted').addEventListener('change', (e) => { state.showDrafted = e.target.checked; render(); });
+
+// ---------- Ask the board (ADR 0008) ----------
+// /api/ask only has a model read the question into a request. Checking that
+// request and answering it happen here, on this board, so the answer always
+// matches what's on screen. The Chrome extension has no server, so no box there.
+const ASK_ERRORS = {
+  limit: "You've asked a lot this hour. Try again later; the board still works.",
+  resting: 'Ask the board is resting right now. The board still works.',
+  question: 'Ask a question of up to 300 characters.',
+};
+const askFail = "Couldn't get an answer just now. Try again.";
+if (/^https?:$/.test(location.protocol)) $('ask').hidden = false;
+$('ask-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const question = $('ask-q').value.trim();
+  const out = $('ask-answer');
+  if (!question) return;
+  out.className = 'ask-answer wait';
+  out.textContent = 'Reading your question…';
+  $('ask-go').disabled = true;
+  try {
+    const res = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(ASK_ERRORS[body.error] ?? askFail);
+    const { request, problems } = checkRequest(body.request, question);
+    if (problems.length) throw new Error("I couldn't understand that. Try rephrasing.");
+    const d = derive();
+    const board = boardState({ categories: cats(), valued: d.v, picks: state.draft.picks, live: d.live, teams: d.teams, myTeam: state.draft.myTeam, bidTo: (p) => bidCeiling(d.fit.worth(p), d.me) });
+    const r = runRequest(request, board);
+    const named = r.players.map((n) => board.available.find((p) => p.name === n)).filter(Boolean);
+    out.className = 'ask-answer';
+    out.replaceChildren(el('p', {}, r.answer), named.length ? el('div', { class: 'ask-picks' }, named.map((p) =>
+      el('button', { type: 'button', onclick: () => { nominate(p); render(); $('log-price').focus(); } }, `Put ${p.name} on the block`))) : null);
+  } catch (err) {
+    out.className = 'ask-answer error';
+    out.textContent = err instanceof TypeError ? askFail : err.message;
+  } finally {
+    $('ask-go').disabled = false;
+  }
+});
 
 // ---------- boot ----------
 load();

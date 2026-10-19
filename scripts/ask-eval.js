@@ -50,8 +50,8 @@ async function ask(model, c, reasoning = { enabled: false }) {
       // Thinking adds hidden output and time, and can use up the whole reply
       // allowance. Off where the model allows it, otherwise as low as it goes.
       reasoning,
-      // The cheapest provider for the model, not OpenRouter's default routing.
-      provider: { sort: 'price' },
+      // The cheapest provider that doesn't store or train on prompts, as live.
+      provider: { sort: 'price', data_collection: 'deny' },
       usage: { include: true },
     }),
   });

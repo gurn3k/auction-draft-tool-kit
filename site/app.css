@@ -197,6 +197,23 @@ label.radio, label.check { flex-direction: row; align-items: center; gap: 8px; f
 /* Recent sales */
 .sold { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px; padding: 10px 24px; background: var(--deep); border-bottom: 2px solid var(--seam); font-size: 14px; }
 .sold .more { min-height: 32px; padding: 0 10px; font-size: 12px; border-width: 1px; color: var(--ink-2); }
+/* Ask the board: one line to ask, a short answer, the players it names as
+   buttons that put them on the block. */
+.ask { padding: 14px 24px; background: var(--panel); border-bottom: 2px solid var(--seam); }
+.ask-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.ask-form label { flex: none; color: var(--amber); font-weight: 700; }
+.ask-form input { flex: 1 1 280px; width: auto; }
+.ask-form button { min-height: 44px; padding: 0 22px; }
+.ask-answer { margin-top: 10px; font-size: 16px; line-height: 1.5; }
+.ask-answer:empty { display: none; }
+.ask-answer.wait { color: var(--ink-2); }
+.ask-answer.error { color: var(--down); }
+.ask-answer p { margin: 0; }
+.ask-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ask-picks button { font: inherit; font-size: 13px; min-height: 32px; padding: 2px 10px; border: 2px solid var(--edge); background: var(--deep); color: var(--ink); cursor: pointer; }
+.ask-picks button:hover, .ask-picks button:focus-visible { border-color: var(--amber); }
+.ask-fine { margin: 8px 0 0; font-size: 12px; color: var(--ink-3); }
+.ask-fine a { color: var(--ink-2); }
 .sold > span { white-space: nowrap; }
 .sold .b-label { margin-right: 4px; }
 .sold b { color: var(--amber); }
@@ -370,6 +387,8 @@ table.teams { width: 100%; border-collapse: collapse; font-size: 14px; }
   .b-cats span small { font-size: 9px; letter-spacing: 0.02em; }
   .log { flex-basis: 100%; }
   .sold { padding: 10px 16px; }
+  .ask { padding: 12px 16px; }
+  .ask-form button { flex: 1 1 100%; }
   .board-head { padding: 12px 16px; }
   .board-head input[type="search"] { flex: 1 1 100%; width: 100%; margin-left: 0; order: 3; }
   .table-wrap { max-height: 70vh; }

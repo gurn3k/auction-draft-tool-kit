@@ -47,9 +47,13 @@ The cheapest model that passes ships. If none passes, the feature doesn't ship, 
 The candidates are the cheapest models on OpenRouter as of 2026-10-19 that support JSON replies, plus a free one and one higher-priced reference model: GPT-OSS 20B, DeepSeek V4.1 Flash, GPT-5 Nano, Gemini 2.5 Flash-Lite and Gemma 4 26B (free). Pinned model ids, not "latest" aliases, so the model can't change under a passing result.
 
 ### Serving it
-- **A Vercel Function** (`api/ask`) holds the OpenRouter key; the page sends the question and the draft state, and the function rebuilds the snapshot with the same `site/lib` code. The browser is never trusted to supply the board text.
-- **Spend:** a dedicated OpenRouter key with a credit limit is the hard cap: when it runs out, the box says the assistant is resting. Per-visitor limits (about 30 questions an hour) and a 300-character question limit keep any one person from using it up.
-- **Privacy:** only the question and the board leave the browser. No names, accounts or IP addresses are sent to the model provider.
+
+Revised for design 2, 2026-10-19.
+
+- **Only the question leaves the browser.** `api/ask.js`, a Vercel Function, holds the OpenRouter key, has the model turn the question into a request, and returns just that request's known fields. The browser checks it (`checkRequest`) and answers it on its own board (`runRequest`), so answers match what's on screen, including a user's own projections CSV and league settings, and no draft data is ever sent.
+- **Models:** DeepSeek V4.1 Flash, falling back to Gemini 2.5 Flash-Lite through OpenRouter's `models` list, from providers that don't store or train on prompts (`data_collection: deny`).
+- **Spend:** a dedicated `cap-drafter` key with a credit limit is the hard cap; when it runs out, OpenRouter answers 402 and the box says it's resting. Per visitor, 30 questions an hour, kept in memory and not exact across function instances. Questions are capped at 300 characters, and the server refuses calls from other sites' pages.
+- **Failure is visible and harmless:** if the server, the model or the limit gets in the way, the box says so and the board works as before. The Chrome extension has no server, so it shows no box.
 
 ## Expected cost
 
@@ -114,3 +118,5 @@ DeepSeek V4.1 Flash's requests matched the expected request on all 42 questions,
 **Choice:** DeepSeek V4.1 Flash, the cheapest that passes, with Gemini 2.5 Flash-Lite as the fallback if DeepSeek's providers are slow or down. At about $0.00001 a question, $1 covers roughly 100,000 questions; the prompt fell from about 6,300 tokens to about 750.
 
 **Limits of this result.** 42 questions written by me, against nine request types I designed, is a narrow test; real users will phrase things in ways it doesn't cover. Those cases should fail safe, as "I couldn't understand that", since code still does every calculation. Once it's live, counting how often that reply appears (counts only, never the questions) is the measure that matters.
+
+**Re-run with the live settings** (`data_collection: deny`), 2026-10-19: DeepSeek V4.1 Flash 98% correct, 0% wrong but shown, 2% refused, median 1.9 s, p90 2.5 s; Gemini 2.5 Flash-Lite 100%, median 0.4 s. DeepSeek's one miss read "$8 or less" as $10; the number check refused it, so the user would have been asked to rephrase rather than given a wrong answer.
