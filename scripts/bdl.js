@@ -31,7 +31,7 @@ export function aliasesFor(display, names) {
  * @param names     { [bdlId]: display name } for players better known by another name
  * @param rookieYear draft year of this season's rookies
  */
-export function buildPlayers(averages, active, { names = {}, rookieYear } = {}) {
+export function buildPlayers(averages, active, { names = {}, values = {}, rookieYear } = {}) {
   const current = new Map(active.map((p) => [p.id, p]));
   const shown = (p) => names[p.id] ?? fullName(p);
   const seen = new Set();
@@ -46,6 +46,8 @@ export function buildPlayers(averages, active, { names = {}, rookieYear } = {}) 
       gp: s.gp, mpg: s.min, fgm: s.fgm, fga: s.fga, ftm: s.ftm, fta: s.fta, tpm: s.fg3m,
       pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, tov: s.tov,
       aliases: aliasesFor(name, [name, fullName(p)]),
+      // A value set by hand for a misleading season (ADR 0010).
+      ...(values[p.id] ? { setValue: { value: values[p.id].value, reason: values[p.id].reason } } : {}),
     };
   });
 

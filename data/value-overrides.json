@@ -1,0 +1,6 @@
+{
+  "_readme": "Hand-kept, read by scripts/fetch-stats.js (ADR 0010). A pre-draft value set by the product owner instead of computed from last season, for a season that misleads. Dollars are for Yahoo's default league ($200 a team) and scale with the budget. Keys are balldontlie player ids.",
+  "values": {
+    "666849": { "name": "Kevin Porter Jr.", "value": 10, "reason": "His 2025-26 numbers, 2.2 steals a game over 38 games, were an anomaly." }
+  }
+}
