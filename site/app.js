@@ -254,13 +254,6 @@ $('my-value-clear').addEventListener('click', () => {
   renderMyValuesStatus();
   logMsg('Cleared your value. He is priced from the data again.');
 });
-$('my-values-clear').addEventListener('click', () => {
-  state.myValues = {};
-  save();
-  render();
-  renderMyValuesStatus();
-  logMsg('Cleared all your values. Everyone is priced from the data again.');
-});
 
 $('csv-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];

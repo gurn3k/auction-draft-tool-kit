@@ -16,7 +16,7 @@ The only way to disagree with a price was to upload a projections CSV for the wh
 
 ## Decision
 
-- On the player on the block, under his price, a "My value" box sets his price for this user. Clear sets it back, and "Clear all" in League setup removes every one.
+- On the player on the block, under his price, a "My value" box sets his price for this user. Clear sets that one player back to the data's price. There is deliberately no "clear all": values are changed one player at a time. League setup shows how many players the user has priced.
 - He takes that price, and everyone else shares the rest of the money by the usual method, so the total is still exactly teams × budget. A user can price a player outside the top 156; he then takes a roster spot from the lowest-ranked player.
 - Live, his price stays at the user's value and doesn't move with inflation. Bid to isn't tilted by roster fit for him, because the user's value already says what he's worth to them.
 - Limits: a whole dollar of at least $1, no more than any team could bid, and the user's values together must leave $1 for every other roster spot.

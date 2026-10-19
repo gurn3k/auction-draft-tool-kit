@@ -191,7 +191,6 @@ td.val.mine::after { content: '*'; margin-left: 1px; }
 .my-value .money-input input { width: 100%; min-width: 0; border: 0; background: transparent; padding: 0 8px; -moz-appearance: textfield; }
 .my-value .money-input input::-webkit-inner-spin-button { display: none; }
 .my-value button { flex: 1 1 0; min-height: 32px; padding: 0 8px; font-size: 12px; }
-.my-values-status button.link { min-height: 0; padding: 0; border: 0; text-decoration: underline; letter-spacing: 0; text-transform: none; font-size: 12px; }
 .b-bid { flex: 1 1 200px; display: flex; flex-direction: column; justify-content: center; gap: 4px; background: var(--home-hot) !important; }
 .b-bid .b-label { color: var(--amber); font-weight: 700; }
 .b-bid b { font-size: clamp(72px, 7vw, 104px); font-weight: 700; line-height: 0.95; letter-spacing: -0.02em; color: var(--amber); }
