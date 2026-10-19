@@ -10,7 +10,8 @@
   "scripts": {
     "fetch": "node --env-file-if-exists=.env.local scripts/fetch-stats.js",
     "serve": "node scripts/serve.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "eval:ask": "node --env-file-if-exists=.env.local scripts/ask-eval.js"
   },
   "license": "UNLICENSED"
 }
