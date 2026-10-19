@@ -2,7 +2,9 @@
 
 Live auction prices for Yahoo fantasy basketball salary cap drafts.
 
-**Try it:** https://fan-basketball-drafter.vercel.app. It needs no sign-up, and your draft stays in your browser.
+**Try it:** https://fan-basketball-drafter.vercel.app. It needs no sign-up, and your draft stays in your browser. The site counts page views with Vercel Web Analytics, which sets no cookies and doesn't see your draft.
+
+Found a bug or have an idea? [Send feedback](https://github.com/gurn3k/auction-draft-tool-kit/issues/new?template=feedback.yml).
 
 Not affiliated with Yahoo.
 
