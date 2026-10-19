@@ -31,9 +31,11 @@ Status: in discovery, 2026-10-19. It ships only if it passes the test in [ADR 00
 
 **What it does.** A question box. You ask in plain English and get a short answer, within about 3 seconds, drawn only from the live board: the players still available, their prices, your money and roster, and every team's max bid.
 
+**Questions it answers** (design 2, after design 1 failed its test): best players in a category or under a price; who to target with my money and spots; my weakest category and who fixes it; which teams can still pay a price; bid or pass at a price; compare players; one player's worth. It declines news, injuries and anything off topic.
+
 **Rules.**
-- Code computes every fact; the model only reads them and writes the answer.
-- Before an answer is shown, code checks that every player in it is still available and every price and stat in it is on the board. If not, you see "Couldn't answer that reliably" instead.
+- The model only reads the question. Code checks what it understood, computes every fact and writes the answer.
+- If the model's reading includes a number that isn't in the question, or a request type the app doesn't know, nothing runs and you're asked to rephrase.
 - It declines questions that aren't about the draft, and says so when a question needs facts it doesn't have (injuries, trades, news).
 - Only board data is sent. No personal details, no account.
 

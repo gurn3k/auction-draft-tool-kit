@@ -1,6 +1,6 @@
 # 0008: Ask the board, answered by a model and checked by code
 
-Status: proposed, 2026-10-19. The test set and the check are built; no model has been chosen and nothing ships until one passes. Code: `site/lib/ask.js`, `scripts/ask-cases.js`, `scripts/ask-eval.js`.
+Status: proposed, 2026-10-19. Design 1 failed its test (results below); design 2 is built and under test. Nothing ships until a model passes. Code: `site/lib/ask.js`, `scripts/ask-cases.js`, `scripts/ask-eval.js`.
 
 ## Context
 
@@ -83,3 +83,34 @@ What went wrong is consistent across models. The mistakes are arithmetic and fil
 The check catches invented players and numbers (no answer that passed it named a sold or made-up player), but it can't catch a real player at a real price who breaks the question's limit. The free model failed on every question: provider errors and per-minute rate limits.
 
 **Next:** the model shouldn't do arithmetic. A redesign where the model only turns the question into a structured request (for example, best in blocks with a Live price of $10 or less), code runs that request on the board, and the answer is written from code's result. Each step can be tested on its own, and the prompt no longer needs the 250-row board, so it should also be faster and cheaper. It gets its own test run against the same pass marks.
+
+## Design 2: the model reads the question, code answers it
+
+Built 2026-10-19 from what design 1's results showed.
+
+1. **The model turns the question into a request.** One of nine types: best players (in a category, under a price), targets for my money and spots, my weakest category, which teams can afford a price, bid or pass, compare players, one player's worth, can't answer (news, injuries), or off topic. The prompt holds the request format and eight examples, about 750 tokens, with no board in it.
+2. **Code checks the request.** Unknown types or categories are refused, and every number in it must appear in the question, so the model can't introduce one.
+3. **Code runs it on the board and writes the answer.** Price limits, team max bids and the bid rule are applied by code. Player names are matched with the same matcher as logging a sale, and a sold or unknown player is reported as such.
+
+Every number and name in an answer now comes from code, so the "wrong but shown" risk narrows to the model misreading a question. The test set separates the two: each case carries the request a perfect reading gives, and code answers all 42 correctly from those (`test/ask.test.js`). Any failure in the model run is a misreading.
+
+**Trade-off.** It only answers the nine types. Anything else gets "I couldn't understand that", which is less flexible than design 1 but never wrong in a way the user can't see.
+
+**Held-out questions.** Eight questions were added after design 2 was written, in wordings the prompt's examples don't use ("any cheap rim protectors under 6 bucks?", "who dishes more dimes, A or B"), to check the model reads questions rather than matching examples. Design 1's 34 questions and checks are unchanged.
+
+### Design 2 results, 2026-10-19
+
+42 questions per model (design 1's 34 plus the 8 held out), same pass marks. The run cost $0.007.
+
+| Model | Correct | Wrong but shown | Refused | Median | p90 | Cost / question |
+|---|---|---|---|---|---|---|
+| **DeepSeek V4.1 Flash** | **100%** | 0% | 0% | 1.6 s | 2.4 s | **$0.00001** |
+| GPT-OSS 20B | 100% | 0% | 0% | 2.5 s | 6.4 s | $0.00002 |
+| GPT-5 Nano | 100% | 0% | 0% | 0.7 s | 1.1 s | $0.00005 |
+| Gemini 2.5 Flash-Lite | 100% | 0% | 0% | 0.4 s | 0.4 s | $0.00008 |
+
+DeepSeek V4.1 Flash's requests matched the expected request on all 42 questions, held-out wordings included. Three models pass every mark; GPT-OSS 20B misses the speed mark (p90 6.4 s).
+
+**Choice:** DeepSeek V4.1 Flash, the cheapest that passes, with Gemini 2.5 Flash-Lite as the fallback if DeepSeek's providers are slow or down. At about $0.00001 a question, $1 covers roughly 100,000 questions; the prompt fell from about 6,300 tokens to about 750.
+
+**Limits of this result.** 42 questions written by me, against nine request types I designed, is a narrow test; real users will phrase things in ways it doesn't cover. Those cases should fail safe, as "I couldn't understand that", since code still does every calculation. Once it's live, counting how often that reply appears (counts only, never the questions) is the measure that matters.

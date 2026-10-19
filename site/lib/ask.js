@@ -1,111 +1,61 @@
-// "Ask the board" (ADR 0008): a plain-English question about the live draft,
-// answered by a language model from a snapshot of the board. Code computes every
-// fact; the model only reads them. Before an answer is shown, verifyReply()
-// checks every player and number in it against the snapshot. Pure functions, so
-// the server, the eval and the tests share them.
+// "Ask the board" (ADR 0008, design 2). A language model only turns a question
+// into a small structured request; code checks the request, runs it on the live
+// board and writes the answer. The first design let the model read the whole
+// board and answer it, and every model tested got the arithmetic wrong (price
+// limits, comparing teams' max bids), so the model no longer does any.
+// Pure functions, shared by the server, the eval and the tests.
 
-import { nameKey } from './names.js';
+import { findPlayer } from './match.js';
 
-// How many available players the snapshot lists, best first. About 4,000 tokens.
-export const BOARD_ROWS = 250;
 export const MAX_QUESTION = 300;
-export const MAX_ANSWER_WORDS = 70;
+const MAX_LIST = 5;
 
-export const SYSTEM_PROMPT = `You help one manager during a fantasy basketball salary cap (auction) draft.
-Answer only from the BOARD below. It was computed by code and is the only truth you have.
+const CATEGORY_WORDS = 'fg = field goal %, ft = free throw %, tpm = threes / 3-pointers, pts = points / scoring, reb = rebounds, ast = assists / passing, stl = steals, blk = blocks / shot-blocking, tov = turnovers (fewer is better)';
 
-Rules:
-- Only recommend players listed under AVAILABLE. Copy names exactly as written there.
-- Only use dollar amounts and stats that appear in the BOARD or the question. Never estimate or round them.
-- "Live" is the market price now. "Bid to" is the most this manager should pay, already adjusted for their roster and capped at what they can afford.
-- "Under $X" means a Live price of $X or less. "Can afford" means a team's Max bid is at least the price.
-- "Should I pay $X?": a price at or below Bid to is "bid", above it is "pass".
-- Stats are per game from last season. You don't know about injuries, trades, news or this season. If the question needs that, say so.
-- If the question isn't about this draft, don't answer it.
-- Answer in at most ${MAX_ANSWER_WORDS} words. Lead with the recommendation.
+export const PARSE_PROMPT = `You turn one question from a fantasy basketball salary cap (auction) draft into a JSON request. Do not answer the question. Code will answer it from the live draft board.
 
-Reply with JSON only:
-{"status": "ok" | "off_topic" | "cannot_answer",
- "answer": "your answer in plain English",
- "players": ["players you recommend, best first, exact names from AVAILABLE"],
- "teams": ["team names, only if the question asks which teams"],
- "verdict": "bid" | "pass" | null (only for "should I pay $X for him?" questions)}`;
+Request fields (use null when the question doesn't say):
+- "intent", one of:
+  "best": the best available players, in one category or overall, optionally under a price.
+  "targets": which players to go after with an amount of money and a number of roster spots.
+  "weakest": what my team is weakest in, and who fixes it.
+  "afford": which other teams can still pay a price for a player.
+  "verdict": whether to pay a given price for a player.
+  "compare": which of two or more players is better, in one category or overall.
+  "player": what a player is worth or what he's good at.
+  "cannot_answer": needs injuries, trades, news, this season's form or anything beyond last season's stats and the board.
+  "off_topic": not about this draft.
+- "category": one of fg, ft, tpm, pts, reb, ast, stl, blk, tov (${CATEGORY_WORDS}). If the question names a category but asks for players who help with it, use that category.
+- "maxPrice": the most the player should cost, for "under $X", "for $X or less", "at most $X".
+- "price": the price in "should I pay $X" or "can teams bid $X".
+- "money": the money the question says I have. "spots": the roster spots it says I have.
+- "count": how many players it asks for.
+- "affordable": true if it asks for players I can afford or "should go after".
+- "players": player names exactly as written in the question.
 
-const round1 = (x) => (Math.round(x * 10) / 10).toFixed(1);
-const pct = (made, att) => (att ? String(Math.round((made / att) * 100)) : '');
-const dollars = (x) => Math.max(0, Math.round(x));
+Copy numbers from the question only. Never invent one.
 
-/**
- * The board as text for the model, plus everything verifyReply() needs.
- * `valued` is valuePlayers() output, `live` livePrices(), `teams` teamSummaries(),
- * `worth(p)` the Worth to you price and `bidTo(p)` the Bid to price for player p.
- */
-export function boardSnapshot({ league, categories, valued, picks, live, teams, myTeam, worth, bidTo, rows = BOARD_ROWS }) {
-  const drafted = new Set(picks.map((p) => p.playerId));
-  const me = teams[myTeam];
-  const available = valued.filter((p) => !drafted.has(p.id) && (live.prices.get(p.id) ?? 0) >= 0.5).slice(0, rows);
-  const allowedDollars = new Set([league.budget, league.teams * league.budget, live.moneyLeft]);
-  const allowedDecimals = new Set();
-  // Dollars are kept as numbers and stats as the exact text the model sees.
-  const add = (set, xs) => xs.forEach((x) => x !== '' && set.add(set === allowedDollars ? Number(x) : String(x)));
+Examples:
+"Best shot-blocker left for $10 or less?" → {"intent":"best","category":"blk","maxPrice":10,"players":[]}
+"I have $40 and 4 spots, who should I target?" → {"intent":"targets","money":40,"spots":4,"players":[]}
+"My team is short on threes. Who should I go after?" → {"intent":"best","category":"tpm","affordable":true,"players":[]}
+"Who can still outbid me at $25 for Jokic?" → {"intent":"afford","price":25,"players":["Jokic"]}
+"Is $30 too much for Curry?" → {"intent":"verdict","price":30,"players":["Curry"]}
+"Sabonis or Gobert for rebounds?" → {"intent":"compare","category":"reb","players":["Sabonis","Gobert"]}
+"Did Ja Morant get traded?" → {"intent":"cannot_answer","players":["Ja Morant"]}
+"What's the weather tomorrow?" → {"intent":"off_topic","players":[]}
 
-  const lines = [];
-  lines.push(`LEAGUE: ${league.teams} teams, $${league.budget} each, ${league.rosterSize} roster spots. Money left in the room: $${dollars(live.moneyLeft)}. Spots left: ${live.slotsLeft}. Inflation: ${Math.round(live.inflation * 100)}%.`);
-  lines.push(`CATEGORIES: ${categories.map((c) => c.label).join(', ')}${categories.some((c) => c.negative) ? ' (fewer TO is better)' : ''}.`);
+Reply with the JSON object only.`;
 
-  // My roster and how it stacks up, computed here so the model never has to.
-  const myPicks = picks.filter((p) => p.team === myTeam);
-  const byId = new Map(valued.map((p) => [p.id, p]));
-  const totals = Object.fromEntries(categories.map((c) => [c.key, myPicks.reduce((a, pk) => a + (byId.get(pk.playerId)?.z?.[c.key] ?? 0), 0)]));
-  const order = [...categories].sort((a, b) => totals[b.key] - totals[a.key]);
-  lines.push('');
-  lines.push(`MY TEAM (${me.name}): $${me.left} left, ${me.open} spots open, max bid $${me.maxBid}.`);
-  lines.push(myPicks.length ? `Roster: ${myPicks.map((p) => `${p.name} $${p.price}`).join(', ')}.` : 'Roster: empty.');
-  if (myPicks.length) lines.push(`Strongest categories: ${order.slice(0, 3).map((c) => c.label).join(', ')}. Weakest: ${order.slice(-3).reverse().map((c) => c.label).join(', ')}.`);
-  add(allowedDollars, [me.left, me.maxBid, ...myPicks.map((p) => p.price)]);
-
-  lines.push('');
-  lines.push('TEAMS (name, money left, spots open, max bid):');
-  for (const t of teams) {
-    lines.push(`${t.name}, $${t.left}, ${t.open}, $${t.maxBid}`);
-    add(allowedDollars, [t.left, t.maxBid]);
-  }
-
-  lines.push('');
-  lines.push(`AVAILABLE (best first; per game, last season): Player, Team, Pos, Live, Bid to, ${categories.map((c) => c.label).join(', ')}`);
-  for (const p of available) {
-    const lv = dollars(live.prices.get(p.id));
-    const bid = bidTo(p);
-    const stats = categories.map((c) => (c.made ? pct(p[c.made], p[c.att]) : round1(p[c.key])));
-    lines.push([p.name, p.team, p.pos, `$${lv}`, `$${bid}`, ...stats].join(', '));
-    add(allowedDollars, [lv, bid, dollars(worth(p))]);
-    add(allowedDecimals, stats);
-  }
-
-  const sold = picks.map((p) => `${p.name} $${p.price} to ${teams[p.team]?.name ?? '?'}`);
-  add(allowedDollars, picks.map((p) => p.price));
-  lines.push('');
-  lines.push(sold.length ? `SOLD: ${sold.join('; ')}.` : 'SOLD: nobody yet.');
-
-  return {
-    text: lines.join('\n'),
-    available: new Map(available.map((p) => [nameKey(p.name), p])),
-    draftedNames: new Set(picks.map((p) => nameKey(p.name))),
-    teamNames: new Set(teams.map((t) => t.name.toLowerCase())),
-    allowedDollars,
-    allowedDecimals,
-  };
-}
-
-export function messages(snapshot, question) {
+export function parseMessages(question) {
   return [
-    { role: 'system', content: `${SYSTEM_PROMPT}\n\nBOARD\n${snapshot.text}` },
+    { role: 'system', content: PARSE_PROMPT },
     { role: 'user', content: question.slice(0, MAX_QUESTION) },
   ];
 }
 
 // Models sometimes wrap JSON in a code fence or add a sentence around it.
-export function parseReply(raw) {
+export function parseJson(raw) {
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
   if (start < 0 || end < start) return null;
@@ -117,47 +67,158 @@ export function parseReply(raw) {
   }
 }
 
-const numbersIn = (s) => [...s.matchAll(/\$\s?(\d[\d,]*)/g)].map((m) => m[1].replace(/,/g, ''));
-const decimalsIn = (s) => [...s.replace(/\$\s?\d[\d,]*(\.\d+)?/g, '').matchAll(/(?<![\d.])(\d+\.\d+)(?![\d.])/g)].map((m) => m[1]);
+const INTENTS = new Set(['best', 'targets', 'weakest', 'afford', 'verdict', 'compare', 'player', 'cannot_answer', 'off_topic']);
+const CATEGORY_KEYS = new Set(['fg', 'ft', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'tov']);
+const NUMBER_FIELDS = ['maxPrice', 'price', 'money', 'spots', 'count'];
 
 /**
- * Checks a parsed reply against the snapshot. Returns a list of problems; empty
- * means it can be shown. The question's own numbers count as allowed, so "I have
- * $20" can be repeated back.
+ * Checks the model's request before anything runs. Returns { request, problems }.
+ * Every number must appear in the question, so the model can't introduce one.
  */
-export function verifyReply(reply, snapshot, question) {
+export function checkRequest(raw, question) {
+  if (!raw) return { request: null, problems: ['The reply was not valid JSON.'] };
   const problems = [];
-  if (!reply) return ['The reply was not valid JSON.'];
-  if (!['ok', 'off_topic', 'cannot_answer'].includes(reply.status)) problems.push(`Unknown status "${reply.status}".`);
-  if (typeof reply.answer !== 'string' || !reply.answer.trim()) problems.push('No answer text.');
-  const answer = typeof reply.answer === 'string' ? reply.answer : '';
-  const players = Array.isArray(reply.players) ? reply.players : [];
-  const teams = Array.isArray(reply.teams) ? reply.teams : [];
-  if (reply.status !== 'ok' && players.length) problems.push('Recommended players on a reply that is not an answer.');
-  if (answer.split(/\s+/).length > MAX_ANSWER_WORDS * 1.5) problems.push('Answer is too long.');
+  if (!INTENTS.has(raw.intent)) problems.push(`Unknown intent "${raw.intent}".`);
+  const category = raw.category == null ? null : String(raw.category).toLowerCase();
+  if (category && !CATEGORY_KEYS.has(category)) problems.push(`Unknown category "${raw.category}".`);
+  const asked = new Set([...question.matchAll(/\d+/g)].map((m) => Number(m[0])));
+  const nums = {};
+  for (const f of NUMBER_FIELDS) {
+    if (raw[f] == null) continue;
+    const n = Number(raw[f]);
+    if (!Number.isInteger(n) || n < 0) problems.push(`${f} is not a whole number.`);
+    else if (!asked.has(n)) problems.push(`${f} ${n} isn't in the question.`);
+    else nums[f] = n;
+  }
+  const players = Array.isArray(raw.players) ? raw.players.filter((p) => typeof p === 'string' && p.trim()).slice(0, MAX_LIST) : [];
+  return { request: { intent: raw.intent, category, ...nums, affordable: raw.affordable === true, players }, problems };
+}
 
-  for (const name of players) {
-    if (typeof name !== 'string' || !snapshot.available.has(nameKey(name))) problems.push(`"${name}" is not an available player.`);
-  }
-  for (const t of teams) {
-    if (typeof t !== 'string' || !snapshot.teamNames.has(t.toLowerCase())) problems.push(`"${t}" is not a team in this league.`);
-  }
-  if (reply.verdict != null && !['bid', 'pass'].includes(reply.verdict)) problems.push(`Unknown verdict "${reply.verdict}".`);
+const money = (x) => `$${Math.round(x)}`;
+const list = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}` : xs[0] ?? '');
+const stat = (p, c) => (c.made ? `${Math.round((p[c.made] / p[c.att]) * 100)}% ${c.label}` : `${p[c.key].toFixed(1)} ${c.label}`);
 
-  const asked = new Set(numbersIn(question));
-  for (const n of numbersIn(answer)) {
-    if (!snapshot.allowedDollars.has(Number(n)) && !asked.has(n)) problems.push(`$${n} is not on the board.`);
-  }
-  const askedDecimals = new Set(decimalsIn(question));
-  for (const d of decimalsIn(answer)) {
-    if (!snapshot.allowedDecimals.has(d) && !askedDecimals.has(d)) problems.push(`${d} is not a stat on the board.`);
-  }
+/**
+ * The board as code sees it, from what the app already computes: valuePlayers(),
+ * livePrices(), teamSummaries(), and the Bid to price for each player.
+ */
+export function boardState({ categories, valued, picks, live, teams, myTeam, bidTo }) {
+  const drafted = new Map(picks.map((p) => [p.playerId, p]));
+  const available = valued.filter((p) => !drafted.has(p.id) && (live.prices.get(p.id) ?? 0) >= 0.5)
+    .map((p) => ({ ...p, live: Math.round(live.prices.get(p.id)), bidTo: bidTo(p) }));
+  const me = teams[myTeam];
+  const byId = new Map(valued.map((p) => [p.id, p]));
+  const totals = Object.fromEntries(categories.map((c) => [c.key, me.picks.reduce((a, pk) => a + (byId.get(pk.playerId)?.z?.[c.key] ?? 0), 0)]));
+  return { categories, valued, available, drafted, teams, me, totals };
+}
 
-  // A sold player may come up only if the question named him.
-  const q = nameKey(question);
-  const a = ` ${nameKey(answer)} `;
-  for (const n of snapshot.draftedNames) {
-    if (a.includes(` ${n} `) && !q.includes(n)) problems.push(`Mentions ${n}, who is already sold.`);
+function resolve(name, board) {
+  const found = findPlayer(name, board.valued, { drafted: new Set(board.drafted.keys()) });
+  const p = found?.kind === 'player' ? found.player : found?.kind === 'suggest' ? found.options[0] : null;
+  if (!p) return { error: `I couldn't find "${name}" on the board.` };
+  const sold = board.drafted.get(p.id);
+  if (sold) return { error: `${p.name} is already sold, to ${board.teams[sold.team].name} for $${sold.price}.`, player: p };
+  const a = board.available.find((x) => x.id === p.id);
+  return a ? { player: a } : { error: `${p.name} isn't priced on this board (below the players expected to be drafted).`, player: p };
+}
+
+const reply = (answer, extra = {}) => ({ status: 'ok', answer, players: [], teams: [], verdict: null, ...extra });
+const decline = (status, answer) => ({ status, answer, players: [], teams: [], verdict: null });
+
+/** Runs a checked request on the board. Everything in the answer comes from code. */
+export function runRequest(req, board) {
+  const { categories, available, me, teams, totals } = board;
+  const cat = categories.find((c) => c.key === req.category) ?? null;
+  const count = Math.min(MAX_LIST, Math.max(1, req.count ?? 3));
+  const byCat = (c) => (a, b) => b.z[c.key] - a.z[c.key];
+  const byWorth = (a, b) => b.bidTo - a.bidTo || b.live - a.live;
+  const named = req.players.map((n) => resolve(n, board));
+
+  switch (req.intent) {
+    case 'off_topic':
+      return decline('off_topic', 'I can only help with this draft.');
+    case 'cannot_answer':
+      return decline('cannot_answer', "I only know last season's stats and this draft board, not injuries, trades or news.");
+
+    case 'best': {
+      let pool = available;
+      if (req.maxPrice != null) pool = pool.filter((p) => p.live <= req.maxPrice);
+      if (req.affordable) pool = pool.filter((p) => p.live <= me.maxBid);
+      const top = [...pool].sort(cat ? byCat(cat) : byWorth).slice(0, count);
+      const limit = req.maxPrice != null ? ` at $${req.maxPrice} or less` : req.affordable ? ` you can afford (max bid $${me.maxBid})` : '';
+      if (!top.length) return reply(`No one left${limit}.`);
+      const line = (p) => `${p.name} (${cat ? `${stat(p, cat)}, ` : ''}Live ${money(p.live)}, Bid to ${money(p.bidTo)})`;
+      return reply(`Best${cat ? ` in ${cat.label}` : ''}${limit}: ${line(top[0])}.${top.length > 1 ? ` Then ${list(top.slice(1).map(line))}.` : ''}`, { players: top.map((p) => p.name) });
+    }
+
+    case 'targets': {
+      const cash = req.money ?? me.left;
+      const spots = req.spots ?? me.open;
+      if (spots <= 0) return reply('Your roster is full.');
+      const n = Math.min(count, spots);
+      // Keep $1 for every spot beyond these, and spread the rest so one player
+      // doesn't take it all: each pick costs at most 1.5x an even share.
+      let allowance = cash - (spots - n);
+      const picks = [];
+      for (let k = 0; k < n; k++) {
+        const share = allowance / (n - k);
+        const cap = Math.min(allowance - (n - k - 1), Math.max(1, Math.floor(share * 1.5)));
+        const p = available.filter((x) => !picks.includes(x) && x.live <= cap).sort(byWorth)[0];
+        if (!p) break;
+        picks.push(p);
+        allowance -= p.live;
+      }
+      if (!picks.length) return reply(`Nothing fits $${cash} for ${spots} spots.`);
+      const total = picks.reduce((a, p) => a + p.live, 0);
+      return reply(`With $${cash} for ${spots} spots: ${list(picks.map((p) => `${p.name} (Live ${money(p.live)})`))}. That's ${money(total)} at Live prices, leaving $1 for each other open spot.`, { players: picks.map((p) => p.name) });
+    }
+
+    case 'weakest': {
+      if (!me.picks.length) return reply("Your roster is empty, so there's no weak spot yet. Ask for the best players instead.");
+      const order = [...categories].sort((a, b) => totals[a.key] - totals[b.key]);
+      const weak = order[0];
+      const top = available.filter((p) => p.live <= me.maxBid).sort(byCat(weak)).slice(0, count);
+      return reply(`You're weakest in ${weak.label}, then ${list(order.slice(1, 3).map((c) => c.label))}. Best fixes you can afford: ${list(top.map((p) => `${p.name} (${stat(p, weak)}, Live ${money(p.live)})`))}.`, { players: top.map((p) => p.name) });
+    }
+
+    case 'afford': {
+      const [n] = named;
+      if (!n) return reply('Which player? Name him in the question.');
+      if (n.error) return reply(n.error);
+      const price = req.price ?? n.player.live;
+      const can = teams.filter((t) => t.index !== me.index && t.maxBid >= price);
+      return reply(can.length
+        ? `${can.length} other ${can.length === 1 ? 'team' : 'teams'} can still bid $${price} on ${n.player.name}: ${list(can.map((t) => `${t.name} (max ${money(t.maxBid)})`))}.`
+        : `No other team can bid $${price} on ${n.player.name}.`, { teams: can.map((t) => t.name), players: [n.player.name] });
+    }
+
+    case 'verdict': {
+      const [n] = named;
+      if (!n || req.price == null) return reply('Ask it as "should I pay $X for him?" with a player and a price.');
+      if (n.error) return reply(n.error);
+      const p = n.player;
+      const ok = req.price <= p.bidTo;
+      return reply(ok
+        ? `Bid. $${req.price} is within his Bid to of ${money(p.bidTo)} (Live ${money(p.live)}).`
+        : `Pass. $${req.price} is over his Bid to of ${money(p.bidTo)} (Live ${money(p.live)}).`, { verdict: ok ? 'bid' : 'pass', players: [p.name] });
+    }
+
+    case 'compare': {
+      const found = named.filter((n) => n.player && !n.error).map((n) => n.player);
+      if (found.length < 2) return reply(named.find((n) => n.error)?.error ?? 'Name two available players to compare.');
+      const ranked = [...found].sort(cat ? byCat(cat) : byWorth);
+      const why = (p) => (cat ? stat(p, cat) : `Bid to ${money(p.bidTo)}`);
+      return reply(`${ranked[0].name}${cat ? ` helps more in ${cat.label}` : ' is worth more to you'}: ${list(ranked.map((p) => `${p.name} ${why(p)}`))}.`, { players: ranked.map((p) => p.name) });
+    }
+
+    case 'player': {
+      const [n] = named;
+      if (!n) return reply('Which player? Name him in the question.');
+      if (n.error) return reply(n.error);
+      const p = n.player;
+      const strong = categories.filter((c) => p.z[c.key] >= 1).sort((a, b) => p.z[b.key] - p.z[a.key]).slice(0, 3);
+      return reply(`${p.name}: Live ${money(p.live)}, Bid to ${money(p.bidTo)}.${strong.length ? ` Strong in ${list(strong.map((c) => c.label))}.` : ''}`, { players: [p.name] });
+    }
   }
-  return problems;
+  return decline('cannot_answer', "I couldn't understand that. Try rephrasing.");
 }

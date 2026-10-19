@@ -3,18 +3,18 @@
 // measured results. Needs OPENROUTER_API_KEY in .env.local.
 //
 //   npm run eval:ask -- --dry                         cases and prompt size, no calls
+//   (design 2: the model turns each question into a request; code answers it)
 //   npm run eval:ask -- openai/gpt-oss-20b deepseek/deepseek-v4.1-flash
 
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { allCases } from './ask-cases.js';
-import { messages, parseReply, verifyReply } from '../site/lib/ask.js';
+import { checkRequest, parseJson, parseMessages, runRequest } from '../site/lib/ask.js';
 
 export const DEFAULT_MODELS = [
   'openai/gpt-oss-20b',
   'deepseek/deepseek-v4.1-flash',
   'openai/gpt-5-nano',
   'google/gemini-2.5-flash-lite',
-  'google/gemma-4-26b-a4b-it:free',
 ];
 
 const args = process.argv.slice(2);
@@ -25,7 +25,7 @@ const cases = allCases(data.players);
 
 if (dry) {
   for (const c of cases) console.log(`${c.id.padEnd(20)} ${c.question}\n${' '.repeat(21)}expects ${c.note}`);
-  const chars = messages(cases[0].snapshot, cases[0].question).reduce((a, m) => a + m.content.length, 0);
+  const chars = parseMessages(cases[0].question).reduce((a, m) => a + m.content.length, 0);
   console.log(`\n${cases.length} cases. Prompt is about ${Math.round(chars / 3.5)} tokens.`);
   process.exit(0);
 }
@@ -43,9 +43,9 @@ async function ask(model, c, reasoning = { enabled: false }) {
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'Cap Drafter eval' },
     body: JSON.stringify({
       model,
-      messages: messages(c.snapshot, c.question),
+      messages: parseMessages(c.question),
       temperature: 0,
-      max_tokens: 1000,
+      max_tokens: 300,
       response_format: { type: 'json_object' },
       // Thinking adds hidden output and time, and can use up the whole reply
       // allowance. Off where the model allows it, otherwise as low as it goes.
@@ -64,18 +64,19 @@ async function ask(model, c, reasoning = { enabled: false }) {
 
 const pctl = (xs, q) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(q * xs.length))] : NaN);
 const rows = [];
-const out = new URL('../.scratch/ask-eval/', import.meta.url);
+const out = new URL('../.scratch/ask-eval/design-2/', import.meta.url);
 mkdirSync(out, { recursive: true });
 
 for (const model of models.length ? models : DEFAULT_MODELS) {
   const results = [];
   for (const c of cases) {
     const r = await ask(model, c);
-    const reply = r.error ? null : parseReply(r.raw);
-    const problems = r.error ? [r.error] : verifyReply(reply, c.snapshot, c.question);
+    // Design 2: the model only reads the question; code checks and answers it.
+    const { request, problems } = r.error ? { request: null, problems: [r.error] } : checkRequest(parseJson(r.raw), c.question);
     const shown = problems.length === 0;
+    const reply = shown ? runRequest(request, c.board) : null;
     const correct = shown && c.check(reply);
-    results.push({ id: c.id, question: c.question, expects: c.note, provider: r.provider, ms: Math.round(r.ms), cost: r.cost ?? 0, tokensIn: r.tokensIn, tokensOut: r.tokensOut, shown, correct, problems, reply: reply ?? r.raw ?? null });
+    results.push({ id: c.id, question: c.question, expects: c.note, gold: c.gold, provider: r.provider, ms: Math.round(r.ms), cost: r.cost ?? 0, tokensIn: r.tokensIn, tokensOut: r.tokensOut, shown, correct, problems, request: request ?? r.raw ?? null, answer: reply?.answer });
     process.stdout.write(correct ? '.' : shown ? 'x' : 'r');
   }
   const n = results.length;
@@ -100,4 +101,4 @@ console.log('|---|---|---|---|---|---|---|');
 for (const r of rows) {
   console.log(`| ${r.model} | ${p(r.correct)} | ${p(r.wrongShown)} | ${p(r.refused)} | ${(r.medianMs / 1000).toFixed(1)} s | ${(r.p90Ms / 1000).toFixed(1)} s | $${r.costPerQ.toFixed(5)} |`);
 }
-console.log(`\n${cases.length} cases per model. Details in .scratch/ask-eval/.`);
+console.log(`\n${cases.length} cases per model. Details in .scratch/ask-eval/design-2/.`);
