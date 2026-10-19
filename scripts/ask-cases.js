@@ -114,7 +114,8 @@ export function casesFor(stage, b) {
   const ask = Math.max(2, star.live);
   const canPay = teams.filter((t) => t.index !== me.index && t.maxBid >= ask).map((t) => t.name.toLowerCase()).sort();
   add('afford', `Which other teams can still bid $${ask} on ${star.name}?`,
-    (r) => r.status === 'ok' && JSON.stringify((r.teams ?? []).map((t) => t.toLowerCase()).sort()) === JSON.stringify(canPay),
+    // Listing my own team too isn't wrong advice, so it's ignored.
+    (r) => r.status === 'ok' && JSON.stringify((r.teams ?? []).map((t) => t.toLowerCase()).filter((t) => t !== me.name.toLowerCase()).sort()) === JSON.stringify(canPay),
     `${canPay.length} teams: ${canPay.join(', ') || 'none'}`);
 
   // 5. Should I pay $X? Over Bid to is a pass, under it a bid.
@@ -133,7 +134,7 @@ export function casesFor(stage, b) {
 
   // 7. Questions it must turn down.
   add('off-topic', 'Write me a short poem about the Lakers.', (r) => r.status === 'off_topic', 'off_topic');
-  add('unknown', `Is ${star.name} injured right now?`, (r) => r.status === 'cannot_answer', 'cannot_answer: no injury data');
+  add('unknown', `Is ${star.name} injured right now?`, (r) => ['cannot_answer', 'off_topic'].includes(r.status) && !r.players?.length, 'declines: no injury data');
   return cases;
 }
 

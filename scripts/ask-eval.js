@@ -36,7 +36,7 @@ if (!key) {
   process.exit(1);
 }
 
-async function ask(model, c) {
+async function ask(model, c, reasoning = { enabled: false }) {
   const started = performance.now();
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -45,17 +45,21 @@ async function ask(model, c) {
       model,
       messages: messages(c.snapshot, c.question),
       temperature: 0,
-      max_tokens: 600,
+      max_tokens: 1000,
       response_format: { type: 'json_object' },
-      // Thinking adds hidden output and time; keep it as low as each model allows.
-      reasoning: { effort: 'low', exclude: true },
+      // Thinking adds hidden output and time, and can use up the whole reply
+      // allowance. Off where the model allows it, otherwise as low as it goes.
+      reasoning,
+      // The cheapest provider for the model, not OpenRouter's default routing.
+      provider: { sort: 'price' },
       usage: { include: true },
     }),
   });
   const ms = performance.now() - started;
   const body = await res.json().catch(() => ({}));
+  if (!res.ok && reasoning.enabled === false) return ask(model, c, { effort: 'minimal', exclude: true });
   if (!res.ok) return { ms, error: body.error?.message ?? `HTTP ${res.status}` };
-  return { ms, raw: body.choices?.[0]?.message?.content ?? '', cost: body.usage?.cost ?? 0, tokensIn: body.usage?.prompt_tokens, tokensOut: body.usage?.completion_tokens };
+  return { ms, raw: body.choices?.[0]?.message?.content ?? '', cost: body.usage?.cost ?? 0, tokensIn: body.usage?.prompt_tokens, tokensOut: body.usage?.completion_tokens, provider: body.provider };
 }
 
 const pctl = (xs, q) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(q * xs.length))] : NaN);
@@ -71,7 +75,7 @@ for (const model of models.length ? models : DEFAULT_MODELS) {
     const problems = r.error ? [r.error] : verifyReply(reply, c.snapshot, c.question);
     const shown = problems.length === 0;
     const correct = shown && c.check(reply);
-    results.push({ id: c.id, question: c.question, expects: c.note, ms: Math.round(r.ms), cost: r.cost ?? 0, tokensIn: r.tokensIn, tokensOut: r.tokensOut, shown, correct, problems, reply: reply ?? r.raw ?? null });
+    results.push({ id: c.id, question: c.question, expects: c.note, provider: r.provider, ms: Math.round(r.ms), cost: r.cost ?? 0, tokensIn: r.tokensIn, tokensOut: r.tokensOut, shown, correct, problems, reply: reply ?? r.raw ?? null });
     process.stdout.write(correct ? '.' : shown ? 'x' : 'r');
   }
   const n = results.length;
