@@ -60,3 +60,26 @@ About 3,800 tokens in and 200 out per question. At OpenRouter prices on 2026-10-
 - The app gains its first server code and its first running cost. The static board still works if the function or the provider is down; only the box is affected.
 - The check limits what answers can say: a model can't cite a number the board doesn't show, even a true one. That is deliberate.
 - The check proves the facts, not the judgment. A correct player at a correct price can still be weak advice; the eval's "correct" column measures that, and it is why the pass mark is on correctness, not just on passing the check.
+
+## Results, 2026-10-19
+
+34 questions per model, thinking turned off where the model allows it, cheapest provider. Three runs in total cost about $0.09.
+
+| Model | Correct | Wrong but shown | Refused | Median | p90 | Cost / question |
+|---|---|---|---|---|---|---|
+| GPT-OSS 20B | 68% | 21% | 12% | 5.3 s | 11.0 s | $0.00016 |
+| **DeepSeek V4.1 Flash** | **85%** | 15% | 0% | 3.6 s | 5.6 s | $0.00013 |
+| GPT-5 Nano | 29% | 47% | 24% | 0.5 s | 0.9 s | $0.00015 |
+| Gemini 2.5 Flash-Lite | 71% | 29% | 0% | 0.4 s | 0.5 s | $0.00067 |
+| Gemma 4 26B (free) | 0% | 0% | 100% | n/a | n/a | $0 |
+
+**No model passes**, so this design doesn't ship. DeepSeek V4.1 Flash came closest: it met the accuracy mark but let 15% wrong answers through, against a limit of 5%, and was slower than the speed marks.
+
+What went wrong is consistent across models. The mistakes are arithmetic and filtering over the board, not language:
+- **Price limits:** recommending a $16 player for "$15 or less", or Chet Holmgren for "$10 or less".
+- **Comparing 12 rows:** listing the wrong teams for "who can still bid $X".
+- **The bid rule:** saying "pass" on a price below Bid to, even with the rule stated in the prompt.
+
+The check catches invented players and numbers (no answer that passed it named a sold or made-up player), but it can't catch a real player at a real price who breaks the question's limit. The free model failed on every question: provider errors and per-minute rate limits.
+
+**Next:** the model shouldn't do arithmetic. A redesign where the model only turns the question into a structured request (for example, best in blocks with a Live price of $10 or less), code runs that request on the board, and the answer is written from code's result. Each step can be tested on its own, and the prompt no longer needs the 250-row board, so it should also be faster and cheaper. It gets its own test run against the same pass marks.
