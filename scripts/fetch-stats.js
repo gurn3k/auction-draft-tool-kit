@@ -11,6 +11,7 @@ const ROSTER_SEASON = '2026-27';
 const API = 'https://api.balldontlie.io/v1/';
 const RAW = '.scratch/raw/bdl';
 const NAMES = 'data/display-names.json';
+const VALUES = 'data/value-overrides.json';
 const OUT = 'site/data/players.json';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -54,7 +55,8 @@ if (process.argv.includes('--cached')) {
 }
 
 const { names } = JSON.parse(await readFile(NAMES, 'utf8'));
-const players = buildPlayers(averages, active, { names, rookieYear: SEASON + 1 });
+const { values } = JSON.parse(await readFile(VALUES, 'utf8'));
+const players = buildPlayers(averages, active, { names, values, rookieYear: SEASON + 1 });
 const out = {
   season: LABEL,
   source: `balldontlie, ${LABEL} regular season per-game averages`,

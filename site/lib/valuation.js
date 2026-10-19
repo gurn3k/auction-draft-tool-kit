@@ -79,6 +79,19 @@ export function allocate(ranked, slots, money) {
   return prices;
 }
 
+// Players with a hand-set value (ADR 0010) take that price first and the rest
+// share what's left, so the total still spends exactly the money.
+function allocateWithSet(ranked, slots, money, set) {
+  const pinned = ranked.filter((p) => set.has(p.id)).slice(0, Math.max(0, slots));
+  const fixed = pinned.reduce((a, p) => a + set.get(p.id), 0);
+  const prices = allocate(ranked.filter((p) => !set.has(p.id)), slots - pinned.length, money - fixed);
+  for (const p of pinned) prices.set(p.id, set.get(p.id));
+  return prices;
+}
+
+// A hand-set value is in dollars for Yahoo's default $200 budget, scaled to this league's.
+const setPrice = (p, league) => Math.max(1, Math.round((p.setValue.value * league.budget) / YAHOO_DEFAULTS.budget));
+
 // Pre-draft values. Returns every eligible player, best first, with per-category
 // z-scores, a total and a dollar value (0 for players outside the rostered pool).
 export function valuePlayers(players, league, { categories = CATEGORIES } = {}) {
@@ -93,7 +106,8 @@ export function valuePlayers(players, league, { categories = CATEGORIES } = {}) 
     scored = scorePool(eligible, pool, categories).sort((a, b) => b.total - a.total);
     pool = scored.slice(0, slots);
   }
-  const prices = allocate(scored, slots, league.teams * league.budget);
+  const set = new Map(scored.filter((p) => p.setValue).map((p) => [p.id, setPrice(p, league)]));
+  const prices = allocateWithSet(scored, slots, league.teams * league.budget, set);
   return scored.map((p, i) => ({ ...p, rank: i + 1, value: prices.get(p.id) ?? 0 }));
 }
 
@@ -106,7 +120,9 @@ export function livePrices(valued, picks, league) {
   const slotsLeft = rosterSpots(league) - picks.length;
   const moneyLeft = league.teams * league.budget - spent;
   const available = valued.filter((p) => !drafted.has(p.id));
-  const prices = allocate(available, slotsLeft, moneyLeft);
+  // A hand-set value stays where it was set; it doesn't move with inflation.
+  const set = new Map(available.filter((p) => p.setValue && p.value > 0).map((p) => [p.id, p.value]));
+  const prices = allocateWithSet(available, slotsLeft, moneyLeft, set);
   // Inflation compares what the remaining money buys now with what the same
   // players were worth before the draft.
   const baseline = available.slice(0, Math.max(0, slotsLeft)).reduce((a, p) => a + p.value, 0);
