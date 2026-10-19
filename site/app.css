@@ -157,7 +157,14 @@ label.radio, label.check { flex-direction: row; align-items: center; gap: 8px; f
 /* On the block: the player up for bid, his price, and the pick form, side by side. */
 .block { display: flex; flex-wrap: wrap; gap: 2px; background: var(--seam); border-bottom: 2px solid var(--seam); }
 .block > * { background: var(--panel-2); padding: 18px 24px; min-width: 0; }
-.b-player { flex: 3 1 420px; display: flex; flex-direction: column; gap: 10px; }
+.b-player { flex: 3 1 420px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; gap: 10px 20px; }
+.b-player > :not(.b-plate) { grid-column: 2; }
+/* Jersey plate: the player's number as a scoreboard lamp figure. No photos (ADR 0007's licensing rule). */
+.b-plate { grid-row: 1 / span 4; align-self: start; width: 104px; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--deep); border: 2px solid var(--edge); }
+.pl-num { font-size: 52px; font-weight: 700; line-height: 0.95; letter-spacing: -0.02em; color: var(--amber); }
+.pl-team, .pl-pos { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); min-height: 1.2em; }
+.block.empty .pl-num { color: var(--ink-3); opacity: 0.5; }
+.pl-num.long { font-size: 44px; }
 .b-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
 .b-title h1 { font-size: clamp(28px, 2.8vw, 40px); font-weight: 700; line-height: 1.05; letter-spacing: -0.01em; }
 .block.empty .b-title h1 { color: var(--ink-2); font-weight: 600; }
@@ -351,7 +358,11 @@ table.teams { width: 100%; border-collapse: collapse; font-size: 14px; }
   .tick-note { display: none; }
   .home { grid-column: 1 / -1; }
   .block > * { padding: 14px 16px; }
-  .b-player { flex-basis: 100%; }
+  .b-player { flex-basis: 100%; column-gap: 14px; }
+  .b-plate { width: 72px; grid-row: 1 / span 2; }
+  .pl-num { font-size: 34px; }
+  .pl-num.long { font-size: 30px; }
+  .pl-team, .pl-pos { font-size: 10px; letter-spacing: 0.08em; }
   .b-prices { flex-direction: row; gap: 24px; flex: 1 1 0; }
   .b-bid { flex: 1 1 0; }
   .b-bid b { font-size: 56px; }

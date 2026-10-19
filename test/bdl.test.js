@@ -4,14 +4,14 @@ import { readFileSync } from 'node:fs';
 import { aliasesFor, buildPlayers } from '../scripts/bdl.js';
 import { YAHOO_DEFAULTS, valuePlayers } from '../site/lib/valuation.js';
 
-const player = (id, first, last, extra = {}) => ({ id, first_name: first, last_name: last, position: 'G', draft_year: 2020, ...extra });
+const player = (id, first, last, extra = {}) => ({ id, first_name: first, last_name: last, position: 'G', draft_year: 2020, jersey_number: '7', ...extra });
 const stats = { gp: 70, min: 34.8, fgm: 9.9, fga: 17.4, ftm: 6.1, fta: 7.4, fg3m: 1.7, pts: 27.7, reb: 12.9, ast: 10.7, stl: 1.4, blk: 0.8, tov: 3.7, age: 31 };
 const team = (abbreviation) => ({ abbreviation });
 
 test('season averages map onto the player shape, with the current team', () => {
-  const [p] = buildPlayers([{ player: player(246, 'Nikola', 'Jokic', { position: 'C' }), stats }], [{ ...player(246, 'Nikola', 'Jokic'), team: team('DEN') }]);
+  const [p] = buildPlayers([{ player: player(246, 'Nikola', 'Jokic', { position: 'C' }), stats }], [{ ...player(246, 'Nikola', 'Jokic', { jersey_number: '15' }), team: team('DEN') }]);
   assert.deepEqual(p, {
-    id: 'bdl-246', name: 'Nikola Jokic', age: 31, team: 'DEN', pos: 'C',
+    id: 'bdl-246', name: 'Nikola Jokic', age: 31, team: 'DEN', pos: 'C', jersey: '15',
     gp: 70, mpg: 34.8, fgm: 9.9, fga: 17.4, ftm: 6.1, fta: 7.4, tpm: 1.7,
     pts: 27.7, reb: 12.9, ast: 10.7, stl: 1.4, blk: 0.8, tov: 3.7, aliases: [],
   });
@@ -31,6 +31,15 @@ test('rostered players without stats are added unvalued, rookies tagged', () => 
   assert.equal(rookie.gp, 0);
   assert.equal(returning.rookie, false);
   assert.equal(returning.team, 'BOS');
+});
+
+test('jersey: the current roster number wins, and a malformed one is left out', () => {
+  const [moved] = buildPlayers([{ player: player(1, 'A', 'B', { jersey_number: '3' }), stats }], [{ ...player(1, 'A', 'B', { jersey_number: '00' }), team: team('BOS') }]);
+  assert.equal(moved.jersey, '00');
+  const [fa] = buildPlayers([{ player: player(2, 'C', 'D', { jersey_number: '3' }), stats }], []);
+  assert.equal(fa.jersey, '3');
+  const [odd] = buildPlayers([], [{ ...player(3, 'E', 'F', { jersey_number: '1922' }), team: team('CHI') }]);
+  assert.equal(odd.jersey, undefined);
 });
 
 test('a hand-kept display name is shown, the legal name kept searchable', () => {

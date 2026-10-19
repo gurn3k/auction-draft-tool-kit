@@ -315,6 +315,9 @@ Square, heavy-edged, uppercase and tracked.
 ### Scoreboard Tick
 A label, a headline figure, and a one-line note, stacked in a panel. Room ticks print figures in ink, except league money left in amber; the home bay prints its figures in amber on umber with parchment labels.
 
+### Jersey Plate
+A square deep-fascia plate (104px, 72px on phones) with a 2px edge-grey border, at the left of the block. It shows the team code over the jersey number in display amber (52px, 700), with the position underneath, both labels 11px uppercase in label ink. Empty, it shows a dim "#". It stands in for a headshot: licensed player photos aren't available, and the plate fits the scoreboard better.
+
 ### Bid To Bay
 The hottest panel on the page: shot-clock umber, an amber BID TO label, the display-size amber figure, and a parchment note explaining the cap. Empty, the figure dims to parchment at 50%.
 
