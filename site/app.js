@@ -593,12 +593,23 @@ function renderTicker({ live, me, repriced }) {
 }
 
 // The player up for bid: the one clicked on the board or typed in the pick form.
+// The jersey plate: number, team and position for the player on the block.
+function renderPlate(p) {
+  const num = p?.jersey ?? '';
+  $('pl-num').textContent = p ? num || '—' : '#';
+  $('pl-num').classList.toggle('long', num.length > 1);
+  $('pl-team').textContent = p?.team ?? '';
+  $('pl-pos').textContent = p?.pos ?? '';
+  $('b-plate').setAttribute('aria-label', p ? (num ? `Number ${num}` : 'Number unknown') : 'No player on the block');
+}
+
 function renderBlock({ board, live, me, teams, fit }) {
   const drafted = new Set(state.draft.picks.map((p) => p.playerId));
   const p = state.selected && !drafted.has(state.selected) ? board.find((x) => x.id === state.selected) : null;
   $('block').classList.toggle('empty', !p);
   // The price box hints at the bid ceiling for the player on the block, and only him.
   $('log-price').placeholder = p && (live.prices.get(p.id) ?? 0) >= 0.5 ? String(bidCeiling(fit.worth(p), me)) : '';
+  renderPlate(p);
   if (!p) {
     $('b-name').textContent = 'No one on the block';
     $('b-meta').textContent = 'Type the nominated player in the board’s search box, or click his row.';

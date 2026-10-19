@@ -39,7 +39,10 @@ async function all(path) {
 
 let averages;
 let active;
+let pulledAt = new Date().toISOString();
 if (process.argv.includes('--cached')) {
+  // A rebuild keeps the date the data was pulled, not today's.
+  pulledAt = JSON.parse(await readFile(OUT, 'utf8')).rostersUpdatedAt ?? pulledAt;
   averages = JSON.parse(await readFile(`${RAW}/season-averages-${SEASON}-regular.json`, 'utf8'));
   active = JSON.parse(await readFile(`${RAW}/active-players.json`, 'utf8'));
 } else {
@@ -56,9 +59,9 @@ const out = {
   season: LABEL,
   source: `balldontlie, ${LABEL} regular season per-game averages`,
   sourceUrl: 'https://www.balldontlie.io/',
-  fetchedAt: new Date().toISOString().slice(0, 10),
+  fetchedAt: pulledAt.slice(0, 10),
   rostersSource: 'balldontlie active players',
-  rostersUpdatedAt: new Date().toISOString(),
+  rostersUpdatedAt: pulledAt,
   rosterSeason: ROSTER_SEASON,
   players,
 };

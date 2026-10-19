@@ -10,6 +10,9 @@ const EMPTY_STATS = { gp: 0, mpg: 0, fgm: 0, fga: 0, ftm: 0, fta: 0, tpm: 0, pts
 
 const fullName = (p) => `${p.first_name} ${p.last_name}`.trim();
 
+// NBA numbers are 0 to 99 (with 00). Anything else is a data slip ("1922"), so it's left out.
+const jerseyOf = (p) => (/^\d{1,2}$/.test(p?.jersey_number ?? '') ? p.jersey_number : undefined);
+
 // Every spelling of a player worth searching by, minus the one shown.
 export function aliasesFor(display, names) {
   const all = new Set();
@@ -29,7 +32,7 @@ export function aliasesFor(display, names) {
  * @param rookieYear draft year of this season's rookies
  */
 export function buildPlayers(averages, active, { names = {}, rookieYear } = {}) {
-  const teams = new Map(active.map((p) => [p.id, p.team?.abbreviation]));
+  const current = new Map(active.map((p) => [p.id, p]));
   const shown = (p) => names[p.id] ?? fullName(p);
   const seen = new Set();
 
@@ -37,7 +40,9 @@ export function buildPlayers(averages, active, { names = {}, rookieYear } = {}) 
     seen.add(p.id);
     const name = shown(p);
     return {
-      id: `bdl-${p.id}`, name, age: s.age ?? null, team: teams.get(p.id) ?? 'FA', pos: p.position ?? '',
+      id: `bdl-${p.id}`, name, age: s.age ?? null, team: current.get(p.id)?.team?.abbreviation ?? 'FA', pos: p.position ?? '',
+      // Today's number for a rostered player; a free agent keeps his last one.
+      jersey: jerseyOf(current.get(p.id)) ?? jerseyOf(p),
       gp: s.gp, mpg: s.min, fgm: s.fgm, fga: s.fga, ftm: s.ftm, fta: s.fta, tpm: s.fg3m,
       pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, tov: s.tov,
       aliases: aliasesFor(name, [name, fullName(p)]),
@@ -50,7 +55,7 @@ export function buildPlayers(averages, active, { names = {}, rookieYear } = {}) 
     .map((p) => {
       const name = shown(p);
       return {
-        id: `bdl-${p.id}`, name, age: null, team: p.team.abbreviation, pos: p.position ?? '', ...EMPTY_STATS,
+        id: `bdl-${p.id}`, name, age: null, team: p.team.abbreviation, pos: p.position ?? '', jersey: jerseyOf(p), ...EMPTY_STATS,
         added: true, rookie: p.draft_year === rookieYear, aliases: aliasesFor(name, [name, fullName(p)]),
       };
     });
