@@ -1,6 +1,6 @@
 // Draft-room UI. All the maths lives in lib/; this file reads the forms, keeps
 // state in memory (and in localStorage as a convenience) and renders.
-import { CATEGORIES, YAHOO_DEFAULTS, livePrices, rosterSpots, valuePlayers } from './lib/valuation.js';
+import { CATEGORIES, YAHOO_DEFAULTS, livePrices, myValueRoom, rosterSpots, valuePlayers } from './lib/valuation.js';
 import { SCARCE_LEFT, addPick, bidCeiling, categorySupply, categoryTotals, checkPick, newDraft, removePick, scarceStrengths, teamSummaries } from './lib/draft.js';
 import { projectionsFromCsv } from './lib/csv.js';
 import { fitDrivers, fitFactor, fitStrength, needWeights, worthToYou } from './lib/fit.js';
@@ -33,6 +33,7 @@ const state = {
   draft: newDraft(YAHOO_DEFAULTS),
   source: 'bundled',
   csv: null, // { name, players }
+  myValues: {}, // { [playerId]: dollars } the user set by hand (ADR 0011)
   sort: { key: 'live', dir: -1 },
   fit: true, // Bid to follows Worth to you (ADR 0006)
   query: '',
@@ -47,8 +48,8 @@ let valuedKey = '';
 // ---------- persistence (a per-browser convenience; the app works without it) ----------
 function save() {
   try {
-    const { league, draft, source, csv, sort, fit, showDrafted, tab } = state;
-    localStorage.setItem(STORE, JSON.stringify({ league, draft, source, csv, sort, fit, showDrafted, tab }));
+    const { league, draft, source, csv, myValues, sort, fit, showDrafted, tab } = state;
+    localStorage.setItem(STORE, JSON.stringify({ league, draft, source, csv, myValues, sort, fit, showDrafted, tab }));
   } catch { /* storage full or blocked: keep going in memory */ }
 }
 // Another tab saved (say, picks logged there): take its state so neither tab
@@ -65,6 +66,7 @@ function load() {
     if (!saved?.league || !saved?.draft) return;
     Object.assign(state, saved);
     if (state.source === 'csv' && !state.csv) state.source = 'bundled';
+    if (!state.myValues || typeof state.myValues !== 'object') state.myValues = {};
   } catch { /* ignore a corrupt or unreadable save */ }
 }
 
@@ -76,9 +78,9 @@ const supplyCats = () => cats().filter((c) => !c.negative);
 const cats = () => CATEGORIES.filter((c) => (state.league.categories ?? CATEGORIES.map((x) => x.key)).includes(c.key));
 
 function getValued() {
-  const key = JSON.stringify([state.source, state.csv?.name, state.csv?.players.length, state.league]);
+  const key = JSON.stringify([state.source, state.csv?.name, state.csv?.players.length, state.league, state.myValues]);
   if (key !== valuedKey) {
-    valued = valuePlayers(players(), state.league, { categories: cats() });
+    valued = valuePlayers(players(), state.league, { categories: cats(), myValues: state.myValues });
     valuedKey = key;
   }
   return valued;
@@ -102,7 +104,8 @@ function derive() {
   const strength = state.fit ? fitStrength(me.picks.length, state.league.rosterSize) : 0;
   const weights = needWeights(totals, cats(), strength);
   const fit = { strength, weights, replacement: live.replacement };
-  fit.worth = (p) => worthToYou(live.prices.get(p.id) ?? 0, strength ? fitFactor(p, live.replacement, weights, cats()) : 1);
+  // A value the user set is already what he's worth to them, so it isn't tilted again.
+  fit.worth = (p) => worthToYou(live.prices.get(p.id) ?? 0, strength && !p.mine ? fitFactor(p, live.replacement, weights, cats()) : 1);
   return { v, board, live, teams, me, byId, fit };
 }
 
@@ -121,6 +124,13 @@ function fillSetup() {
   $('source-csv').disabled = !state.csv;
   $('csv-status').textContent = state.csv ? `Loaded ${state.csv.players.length} players from ${state.csv.name}.` : 'No file loaded. Columns: name, FGM/FGA (or FG%), FTM/FTA (or FT%), 3PM, PTS, REB, AST, STL, BLK, TO.';
   $('csv-status').classList.remove('error');
+  renderMyValuesStatus();
+}
+
+function renderMyValuesStatus() {
+  const n = Object.keys(state.myValues).length;
+  $('my-values-status').hidden = !n;
+  $('my-values-count').textContent = `${n} player${n === 1 ? '' : 's'} priced by you.`;
 }
 
 function setupSummary() {
@@ -215,6 +225,41 @@ $('reset-draft').addEventListener('click', () => {
   state.draft = { ...state.draft, picks: [] };
   logMsg('Draft cleared.', 'ok');
   render();
+});
+
+// ---------- my values (ADR 0011) ----------
+$('my-value-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const id = state.selected;
+  const n = Number($('my-value').value);
+  const l = state.league;
+  const most = l.budget - l.rosterSize + 1; // the most any one team can bid
+  const others = Object.entries(state.myValues).filter(([k]) => k !== id);
+  const room = myValueRoom(l, others.length + 1) - others.reduce((a, [, v]) => a + v, 0);
+  if (!id || !Number.isInteger(n) || n < 1) return logMsg('Enter a whole-dollar value of $1 or more.', 'error');
+  if (n > Math.min(most, room)) {
+    return logMsg(n > most ? `No team can bid more than ${money(most)} in this league.` : `Your values would leave less than $1 for other roster spots. The most you can set here is ${money(room)}.`, 'error');
+  }
+  state.myValues = { ...state.myValues, [id]: n };
+  save();
+  render();
+  renderMyValuesStatus();
+  logMsg(`Set your value for ${getValued().find((p) => p.id === id)?.name ?? 'him'} to ${money(n)}. Other prices were re-shared around it.`);
+});
+$('my-value-clear').addEventListener('click', () => {
+  const { [state.selected]: _, ...rest } = state.myValues;
+  state.myValues = rest;
+  save();
+  render();
+  renderMyValuesStatus();
+  logMsg('Cleared your value. He is priced from the data again.');
+});
+$('my-values-clear').addEventListener('click', () => {
+  state.myValues = {};
+  save();
+  render();
+  renderMyValuesStatus();
+  logMsg('Cleared all your values. Everyone is priced from the data again.');
 });
 
 $('csv-file').addEventListener('change', async (e) => {
@@ -435,7 +480,7 @@ function renderBoard({ v, board, live, me, fit, repriced }) {
       el('span', { class: 'nm' }, p.name), el('span', { class: 'meta' }, teamLabel(p)),
       p.added ? el('span', { class: 'tag', title: 'On a 2026-27 roster, with no 2025-26 stats to value' }, p.rookie ? 'Rookie' : 'No 2025-26 stats')
         : !p.z ? el('span', { class: 'tag', title: `Played fewer than the ${state.league.minGames} games needed to be valued` }, `${p.gp} GP`) : null),
-    el('td', { class: 'val' }, p.value >= 0.5 ? money(p.value) : '—'),
+    el('td', { class: p.mine ? 'val mine' : 'val', title: p.mine ? 'Your value' : null }, p.value >= 0.5 ? money(p.value) : '—'),
     liveCell,
     el('td', { class: relit ? 'bid relit' : 'bid' }, bid ? money(bid) : ''),
     ...cats().map((c, i) => (p.z
@@ -617,6 +662,9 @@ function renderBlock({ board, live, me, teams, fit }) {
     $('b-note').textContent = '';
     $('b-scarce').hidden = true;
     $('b-flag').hidden = true;
+    $('my-value-form').hidden = true;
+    $('b-value').classList.remove('mine');
+    $('b-value-label').textContent = 'Pre-draft';
     for (const id of ['b-value', 'b-live', 'b-bid']) $(id).textContent = '—';
     $('b-bid-note').textContent = me.open ? `Your max bid is ${money(me.maxBid)}` : 'Your roster is full';
     return;
@@ -659,6 +707,12 @@ function renderBlock({ board, live, me, teams, fit }) {
     ? `Scarce: ${scarce.map((c) => (c.left === 1 ? `the last player strong in ${c.label}` : `one of the last ${c.left} strong in ${c.label}`)).join(' · ')}`
     : '';
   $('b-value').textContent = p.value >= 0.5 ? money(p.value) : '—';
+  // Users can price a valued player themselves (ADR 0011); the rest re-share around it.
+  $('b-value').classList.toggle('mine', !!p.mine);
+  $('b-value-label').textContent = p.mine ? 'My value' : 'Pre-draft';
+  $('my-value-form').hidden = !p.z;
+  if (document.activeElement !== $('my-value')) $('my-value').value = p.mine ? Math.round(p.value) : '';
+  $('my-value-clear').hidden = !p.mine;
   $('b-live').textContent = lv >= 0.5 ? money(lv) : '—';
   $('b-bid').textContent = bid ? money(bid) : '—';
   // Say what moved Bid to away from Live: my max bid, or my roster's needs.
