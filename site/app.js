@@ -624,7 +624,7 @@ function renderBlock({ board, live, me, teams, fit }) {
   const worth = fit.worth(p);
   const bid = lv >= 0.5 ? bidCeiling(worth, me) : 0;
   $('b-name').textContent = p.name;
-  $('b-meta').textContent = ['On the block', teamLabel(p), p.rank ? `#${p.rank} pre-draft` : ''].filter(Boolean).join(' · ');
+  $('b-meta').textContent = ['On the block', teamLabel(p), p.rank && !p.setValue ? `#${p.rank} pre-draft` : ''].filter(Boolean).join(' · ');
   $('b-cats').style.setProperty('--n', cats().length);
   $('b-cats').replaceChildren(...(p.z ? cats().map((c) => el('span', { class: zClass(p.z[c.key]) || null }, el('small', {}, c.label), fmtZ(p.z[c.key]))) : []));
   const list = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}` : xs[0]);
@@ -645,6 +645,8 @@ function renderBlock({ board, live, me, teams, fit }) {
       lv >= 0.5 ? ` ${afford === open.length ? 'Every team' : `${afford} of ${open.length} teams`} can still afford him at Live.` : '',
     ].join('');
   }
+  // A hand-set value (ADR 0010) says so, so a low price isn't mistaken for a bargain.
+  if (p.setValue && p.value > 0) note += ` Value set by hand to ${money(p.value)}: ${p.setValue.reason}`;
   $('b-note').textContent = note;
   // Warn when he's one of the last few strong players in a category, so a gap
   // doesn't become unfixable without the price itself being inflated.
