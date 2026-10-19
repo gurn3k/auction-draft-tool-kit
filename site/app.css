@@ -175,6 +175,8 @@ label.radio, label.check { flex-direction: row; align-items: center; gap: 8px; f
 .b-cats span small { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; opacity: 0.85; }
 .b-scarce { margin: 0; align-self: start; padding: 4px 10px; border: 2px solid var(--amber); color: var(--amber-hi); font-size: 14px; font-weight: 700; }
 .b-scarce[hidden] { display: none; }
+.b-flag { margin: 0; align-self: start; padding: 4px 10px; border-left: 3px solid var(--amber); color: var(--ink); font-size: 14px; max-width: 70ch; }
+.b-flag[hidden] { display: none; }
 .b-note { margin: 0; font-size: 14px; color: var(--ink-2); max-width: 70ch; }
 .b-prices { flex: 1 1 140px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
 .b-prices > div { display: flex; flex-direction: column; gap: 2px; }
