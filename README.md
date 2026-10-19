@@ -6,6 +6,8 @@ Live auction prices for Yahoo fantasy basketball salary cap drafts.
 
 Not affiliated with Yahoo.
 
+![Cap Drafter during a live draft: Stephen Curry on the block with a $33 Bid to, after nine picks have pushed league inflation to −1.6%](docs/screenshot.png)
+
 ## The problem
 
 In a salary cap draft, every manager gets a budget (Yahoo's default is $200) and bids on players one at a time. Yahoo's draft room shows a fixed "projected salary" next to each player. That number ignores your league's budget, roster size and categories. It also ignores the room: once a few stars sell for more or less than expected, every remaining price should move. Nobody can redo that maths by hand under a 30-second bid clock.
