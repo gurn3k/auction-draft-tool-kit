@@ -66,3 +66,12 @@ test('an unreadable model reply is an error, not an answer', async () => {
   const res = await handle(ask({ question: 'q' }), opts(model('sorry, no JSON here')));
   assert.equal(res.status, 502);
 });
+
+test('passes on every field the browser checks, including filters and unsupported conditions', async () => {
+  const m = model('{"intent":"best","category":"ast","positions":["F"],"team":"BOS","players":[],"unsupported":["young"]}');
+  const res = await handle(ask({ question: 'young forward passers on the Celtics' }), opts(m));
+  const { request } = await res.json();
+  assert.deepEqual(request.positions, ['F']);
+  assert.equal(request.team, 'BOS');
+  assert.deepEqual(request.unsupported, ['young']);
+});

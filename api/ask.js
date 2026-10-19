@@ -9,7 +9,7 @@ import { MAX_QUESTION, parseJson, parseMessages } from '../site/lib/ask.js';
 export const MODELS = ['deepseek/deepseek-v4.1-flash', 'google/gemini-2.5-flash-lite'];
 export const LIMIT = 30; // questions per visitor per hour
 const HOUR = 60 * 60 * 1000;
-const FIELDS = ['intent', 'category', 'maxPrice', 'price', 'money', 'spots', 'count', 'affordable', 'players'];
+const FIELDS = ['intent', 'category', 'maxPrice', 'price', 'money', 'spots', 'count', 'affordable', 'positions', 'team', 'players', 'unsupported'];
 
 // Per-visitor limit, kept in memory. Instances are reused, so it holds for a
 // burst from one visitor, but it isn't exact across instances: the hard cap on

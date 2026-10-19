@@ -9,7 +9,7 @@ const data = JSON.parse(readFileSync(new URL('../site/data/players.json', import
 const draft = simulate(data.players, YAHOO_DEFAULTS, { count: 60, mine: 5, seed: 2 });
 const { board, available } = derive(data.players, YAHOO_DEFAULTS, draft);
 const sold = draft.picks[0];
-const req = (r) => ({ category: null, affordable: false, players: [], ...r });
+const req = (r) => ({ category: null, affordable: false, positions: [], team: null, players: [], unsupported: [], ...r });
 
 test('with a perfect reading of each question, code answers every test case correctly', () => {
   const cases = allCases(data.players);
@@ -68,4 +68,19 @@ test('declines carry no players', () => {
     assert.equal(r.status, intent);
     assert.deepEqual(r.players, []);
   }
+});
+
+test('a condition the request cannot hold is declined, not dropped', () => {
+  const r = runRequest(req({ intent: 'best', category: 'pts', unsupported: ['under 25 years old'] }), board);
+  assert.equal(r.status, 'cannot_answer');
+  assert.deepEqual(r.players, []);
+  assert.match(r.answer, /under 25 years old/);
+});
+
+test('position and team limits are applied by code and shown in the answer', () => {
+  const r = runRequest(req({ intent: 'best', category: 'ast', positions: ['F'] }), board);
+  assert.match(r.answer, /among forwards/);
+  for (const name of r.players) assert.ok(available.find((p) => p.name === name).pos.includes('F'), name);
+  assert.match(runRequest(req({ intent: 'best', team: 'XYZ' }), board).answer, /don't know the team/);
+  assert.match(checkRequest({ intent: 'best', positions: ['PG'], players: [] }, 'q').problems.join(), /Unknown position/);
 });

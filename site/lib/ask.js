@@ -31,12 +31,17 @@ Request fields (use null when the question doesn't say):
 - "money": the money the question says I have. "spots": the roster spots it says I have.
 - "count": how many players it asks for.
 - "affordable": true if it asks for players I can afford or "should go after".
+- "positions": positions the question limits to, from "G" (guards), "F" (forwards), "C" (centers). Empty when it doesn't limit.
+- "team": the NBA team the question limits to, as its abbreviation (BOS, LAL, NYK...).
 - "players": player names exactly as written in the question.
+- "unsupported": every condition in the question that none of the fields above can hold, in a few words each (for example "under 25 years old", "rookies", "good defenders", "plays every night"). Empty when every condition fits a field. Never drop a condition silently: if it doesn't fit, list it here.
 
 Copy numbers from the question only. Never invent one.
 
 Examples:
-"Best shot-blocker left for $10 or less?" → {"intent":"best","category":"blk","maxPrice":10,"players":[]}
+"Best shot-blocker left for $10 or less?" → {"intent":"best","category":"blk","maxPrice":10,"players":[],"unsupported":[]}
+"Top scoring guard on the Knicks?" → {"intent":"best","category":"pts","positions":["G"],"team":"NYK","players":[],"unsupported":[]}
+"Best young rebounder?" → {"intent":"best","category":"reb","players":[],"unsupported":["young"]}
 "I have $40 and 4 spots, who should I target?" → {"intent":"targets","money":40,"spots":4,"players":[]}
 "My team is short on threes. Who should I go after?" → {"intent":"best","category":"tpm","affordable":true,"players":[]}
 "Who can still outbid me at $25 for Jokic?" → {"intent":"afford","price":25,"players":["Jokic"]}
@@ -71,6 +76,7 @@ const INTENTS = new Set(['best', 'targets', 'weakest', 'afford', 'verdict', 'com
 const CATEGORY_LABELS = { fg: 'FG%', ft: 'FT%', tpm: '3PM', pts: 'PTS', reb: 'REB', ast: 'AST', stl: 'STL', blk: 'BLK', tov: 'TO' };
 const CATEGORY_KEYS = new Set(Object.keys(CATEGORY_LABELS));
 const NUMBER_FIELDS = ['maxPrice', 'price', 'money', 'spots', 'count'];
+const POSITIONS = new Set(['G', 'F', 'C']);
 
 /**
  * Checks the model's request before anything runs. Returns { request, problems }.
@@ -91,8 +97,14 @@ export function checkRequest(raw, question) {
     else if (!asked.has(n)) problems.push(`${f} ${n} isn't in the question.`);
     else nums[f] = n;
   }
-  const players = Array.isArray(raw.players) ? raw.players.filter((p) => typeof p === 'string' && p.trim()).slice(0, MAX_LIST) : [];
-  return { request: { intent: raw.intent, category, ...nums, affordable: raw.affordable === true, players }, problems };
+  const strings = (xs, max) => (Array.isArray(xs) ? xs.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim()).slice(0, max) : []);
+  const players = strings(raw.players, MAX_LIST);
+  const positions = strings(raw.positions, 3).map((x) => x.toUpperCase());
+  if (positions.some((x) => !POSITIONS.has(x))) problems.push(`Unknown position in "${positions.join(', ')}".`);
+  const team = typeof raw.team === 'string' && raw.team.trim() ? raw.team.trim().toUpperCase() : null;
+  if (team && !/^[A-Z]{2,3}$/.test(team)) problems.push(`"${raw.team}" is not a team abbreviation.`);
+  const unsupported = strings(raw.unsupported, 5).map((x) => x.slice(0, 60));
+  return { request: { intent: raw.intent, category, ...nums, affordable: raw.affordable === true, positions, team, players, unsupported }, problems };
 }
 
 const money = (x) => `$${Math.round(x)}`;
@@ -123,6 +135,7 @@ function resolve(name, board) {
   return a ? { player: a } : { error: `${p.name} isn't priced on this board (below the players expected to be drafted).`, player: p };
 }
 
+const POSITION_WORDS = { G: 'guards', F: 'forwards', C: 'centers' };
 const reply = (answer, extra = {}) => ({ status: 'ok', answer, players: [], teams: [], verdict: null, ...extra });
 const decline = (status, answer) => ({ status, answer, players: [], teams: [], verdict: null });
 
@@ -134,6 +147,16 @@ export function runRequest(req, board) {
   const byCat = (c) => (a, b) => b.z[c.key] - a.z[c.key];
   const byWorth = (a, b) => b.bidTo - a.bidTo || b.live - a.live;
   const named = req.players.map((n) => resolve(n, board));
+  const declines = ['off_topic', 'cannot_answer'].includes(req.intent);
+  // A condition the request can't hold is never dropped: answering without it
+  // would answer a different question ("forwards only" once came back as all
+  // players). Say so instead.
+  if (!declines && req.unsupported?.length) return decline('cannot_answer', `I can't filter by ${list(req.unsupported.map((u) => `"${u}"`))} yet, so I won't guess. Try asking without it.`);
+  const positions = req.positions ?? [];
+  if (req.team && !board.valued.some((p) => p.team === req.team)) return reply(`I don't know the team "${req.team}".`);
+  // Listed positions (G, F, C, or pairs like G-F), not Yahoo's eligibility.
+  const fits = (p) => (!positions.length || positions.some((x) => (p.pos ?? '').includes(x))) && (!req.team || p.team === req.team);
+  const scope = [positions.length ? `among ${list(positions.map((x) => POSITION_WORDS[x]))}` : '', req.team ? `on ${req.team}` : ''].filter(Boolean).join(' ');
   if (req.category && !cat && !['off_topic', 'cannot_answer'].includes(req.intent)) return reply(`Your league doesn't score ${CATEGORY_LABELS[req.category]}, so it isn't on this board.`);
 
   switch (req.intent) {
@@ -143,11 +166,11 @@ export function runRequest(req, board) {
       return decline('cannot_answer', "I only know last season's stats and this draft board, not injuries, trades or news.");
 
     case 'best': {
-      let pool = available;
+      let pool = available.filter(fits);
       if (req.maxPrice != null) pool = pool.filter((p) => p.live <= req.maxPrice);
       if (req.affordable) pool = pool.filter((p) => p.live <= me.maxBid);
       const top = [...pool].sort(cat ? byCat(cat) : byWorth).slice(0, count);
-      const limit = req.maxPrice != null ? ` at $${req.maxPrice} or less` : req.affordable ? ` you can afford (max bid $${me.maxBid})` : '';
+      const limit = `${scope ? ` ${scope}` : ''}${req.maxPrice != null ? ` at $${req.maxPrice} or less` : req.affordable ? ` you can afford (max bid $${me.maxBid})` : ''}`;
       if (!top.length) return reply(`No one left${limit}.`);
       const line = (p) => `${p.name} (${cat ? `${stat(p, cat)}, ` : ''}Live ${money(p.live)}, Bid to ${money(p.bidTo)})`;
       return reply(`Best${cat ? ` in ${cat.label}` : ''}${limit}: ${line(top[0])}.${top.length > 1 ? ` Then ${list(top.slice(1).map(line))}.` : ''}`, { players: top.map((p) => p.name) });
@@ -165,22 +188,22 @@ export function runRequest(req, board) {
       for (let k = 0; k < n; k++) {
         const share = allowance / (n - k);
         const cap = Math.min(allowance - (n - k - 1), Math.max(1, Math.floor(share * 1.5)));
-        const p = available.filter((x) => !picks.includes(x) && x.live <= cap).sort(byWorth)[0];
+        const p = available.filter((x) => fits(x) && !picks.includes(x) && x.live <= cap).sort(byWorth)[0];
         if (!p) break;
         picks.push(p);
         allowance -= p.live;
       }
       if (!picks.length) return reply(`Nothing fits $${cash} for ${spots} spots.`);
       const total = picks.reduce((a, p) => a + p.live, 0);
-      return reply(`With $${cash} for ${spots} spots: ${list(picks.map((p) => `${p.name} (Live ${money(p.live)})`))}. That's ${money(total)} at Live prices, leaving $1 for each other open spot.`, { players: picks.map((p) => p.name) });
+      return reply(`With $${cash} for ${spots} spots${scope ? `, ${scope}` : ''}: ${list(picks.map((p) => `${p.name} (Live ${money(p.live)})`))}. That's ${money(total)} at Live prices, leaving $1 for each other open spot.`, { players: picks.map((p) => p.name) });
     }
 
     case 'weakest': {
       if (!me.picks.length) return reply("Your roster is empty, so there's no weak spot yet. Ask for the best players instead.");
       const order = [...categories].sort((a, b) => totals[a.key] - totals[b.key]);
       const weak = order[0];
-      const top = available.filter((p) => p.live <= me.maxBid).sort(byCat(weak)).slice(0, count);
-      return reply(`You're weakest in ${weak.label}, then ${list(order.slice(1, 3).map((c) => c.label))}. Best fixes you can afford: ${list(top.map((p) => `${p.name} (${stat(p, weak)}, Live ${money(p.live)})`))}.`, { players: top.map((p) => p.name) });
+      const top = available.filter((p) => fits(p) && p.live <= me.maxBid).sort(byCat(weak)).slice(0, count);
+      return reply(`You're weakest in ${weak.label}, then ${list(order.slice(1, 3).map((c) => c.label))}. Best fixes you can afford${scope ? ` ${scope}` : ''}: ${list(top.map((p) => `${p.name} (${stat(p, weak)}, Live ${money(p.live)})`))}.`, { players: top.map((p) => p.name) });
     }
 
     case 'afford': {

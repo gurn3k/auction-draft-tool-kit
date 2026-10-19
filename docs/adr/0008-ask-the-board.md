@@ -120,3 +120,9 @@ DeepSeek V4.1 Flash's requests matched the expected request on all 42 questions,
 **Limits of this result.** 42 questions written by me, against nine request types I designed, is a narrow test; real users will phrase things in ways it doesn't cover. Those cases should fail safe, as "I couldn't understand that", since code still does every calculation. Once it's live, counting how often that reply appears (counts only, never the questions) is the measure that matters.
 
 **Re-run with the live settings** (`data_collection: deny`), 2026-10-19: DeepSeek V4.1 Flash 98% correct, 0% wrong but shown, 2% refused, median 1.9 s, p90 2.5 s; Gemini 2.5 Flash-Lite 100%, median 0.4 s. DeepSeek's one miss read "$8 or less" as $10; the number check refused it, so the user would have been asked to rephrase rather than given a wrong answer.
+
+### A dropped condition, found in preview, 2026-10-19
+
+The first preview question, "best in assists, forwards only", came back with Jokić, Cunningham and Giddey: the request had no place for a position, so the model dropped "forwards only" and code answered a different question. The number check couldn't catch it, because nothing was invented; something was left out.
+
+Fixes: requests can now limit by listed position (G, F, C) and NBA team, and must list any condition they can't hold under `unsupported`. If that list isn't empty, the box says "I can't filter by … yet" instead of answering without it. Answers name the limits they applied ("Best in AST among forwards"), so a misreading is visible. Nine cases of this kind were added, including the preview question word for word and three that must be declined (age, rookies, health). On all 51 questions: DeepSeek V4.1 Flash 100% correct, median 1.5 s; Gemini 2.5 Flash-Lite 100%, 0.4 s.

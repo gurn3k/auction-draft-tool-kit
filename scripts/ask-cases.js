@@ -77,7 +77,7 @@ const CAPS = { early: [['blk', 10], ['ast', 15], ['tpm', 8]], mid: [['blk', 5], 
 export function casesFor(stage, b) {
   const { available, teams, me, totals, categories } = b;
   const cases = [];
-  const add = (id, question, check, note, gold) => cases.push({ id: `${stage}-${id}`, stage, question, check, note, gold: { category: null, affordable: false, players: [], ...gold } });
+  const add = (id, question, check, note, gold) => cases.push({ id: `${stage}-${id}`, stage, question, check, note, gold: { category: null, affordable: false, positions: [], team: null, players: [], unsupported: [], ...gold } });
 
   // 1. Best in a category under a price.
   for (const [stat, cap] of CAPS[stage]) {
@@ -139,6 +139,7 @@ export function casesFor(stage, b) {
   add('off-topic', 'Write me a short poem about the Lakers.', (r) => r.status === 'off_topic', 'off_topic', { intent: 'off_topic' });
   add('unknown', `Is ${star.name} injured right now?`, (r) => ['cannot_answer', 'off_topic'].includes(r.status) && !r.players?.length, 'declines: no injury data', { intent: 'cannot_answer', players: [star.name] });
   if (stage === 'mid') rephrased(b, add);
+  if (stage === 'mid') constraints(b, add);
   return cases;
 }
 
@@ -162,6 +163,28 @@ function rephrased({ available, teams, me }, add) {
   add('re-compare', `who dishes more dimes, ${pair[1].name} or ${pair[0].name}`, (r) => r.status === 'ok' && first(r) === wantAst, `more assists: ${wantAst}`, { intent: 'compare', category: 'ast', players: [pair[1].name, pair[0].name] });
   add('re-news', `Did ${available[0].name} sign an extension this summer?`, (r) => ['cannot_answer', 'off_topic'].includes(r.status) && !r.players?.length, 'declines: no news', { intent: 'cannot_answer', players: [available[0].name] });
   add('re-offtopic', 'whats a good pizza place in toronto', (r) => r.status === 'off_topic', 'off_topic', { intent: 'off_topic' });
+}
+
+// Added after a preview user asked "best in assists, forwards only" and the
+// position was silently dropped. Each condition must be applied, or the
+// question declined; never answered without it.
+function constraints({ available }, add) {
+  const has = (p, x) => (p.pos ?? '').includes(x);
+  const filtered = (f, cat) => top(available.filter(f), (p) => p.z[cat], 3);
+  const best = (id, question, f, cat, gold) => {
+    const want = filtered(f, cat);
+    add(id, question, (r) => r.status === 'ok' && want.includes(first(r)), `top 3 by ${cat} where filtered: ${want.join(', ')}`, gold);
+  };
+  best('pos-f-ast', 'best in assists, forwards only', (p) => has(p, 'F'), 'ast', { intent: 'best', category: 'ast', positions: ['F'] });
+  best('pos-g-blk', "who's the top shot-blocking guard?", (p) => has(p, 'G'), 'blk', { intent: 'best', category: 'blk', positions: ['G'] });
+  best('pos-c-tpm', 'Need a center who hits threes', (p) => has(p, 'C'), 'tpm', { intent: 'best', category: 'tpm', positions: ['C'] });
+  best('pos-fc-blk', 'Top forward or center for blocks under $10', (p) => (has(p, 'F') || has(p, 'C')) && p.live <= 10, 'blk', { intent: 'best', category: 'blk', positions: ['F', 'C'], maxPrice: 10 });
+  best('team-reb', 'Best rebounder on the Celtics?', (p) => p.team === 'BOS', 'reb', { intent: 'best', category: 'reb', team: 'BOS' });
+  best('team-ast', 'any Lakers who can pass, $15 or less?', (p) => p.team === 'LAL' && p.live <= 15, 'ast', { intent: 'best', category: 'ast', team: 'LAL', maxPrice: 15 });
+  const declines = (r) => ['cannot_answer', 'off_topic'].includes(r.status) && !r.players?.length;
+  add('unsup-age', 'best scorer under 25 years old', declines, 'declines: no age filter', { intent: 'best', category: 'pts', unsupported: ['under 25 years old'] });
+  add('unsup-rookie', "who's the best rookie left?", declines, 'declines: no rookie filter', { intent: 'best', unsupported: ['rookie'] });
+  add('unsup-healthy', 'best three point shooter who stays healthy', declines, 'declines: no health data', { intent: 'best', category: 'tpm', unsupported: ['stays healthy'] });
 }
 
 export function allCases(players, league = YAHOO_DEFAULTS) {
