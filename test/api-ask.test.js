@@ -28,7 +28,8 @@ test('sends only the question, to the tested models, from providers that keep no
   const m = model('{"intent":"off_topic","players":[]}');
   await handle(ask({ question: 'hello', draft: { secret: true } }), opts(m));
   const sent = m.calls[0];
-  assert.deepEqual(sent.models, MODELS);
+  assert.equal(sent.model, MODELS[0].model);
+  assert.deepEqual(sent.reasoning, MODELS[0].reasoning);
   assert.equal(sent.provider.data_collection, 'deny');
   assert.equal(sent.messages.at(-1).content, 'hello');
   assert.doesNotMatch(JSON.stringify(sent), /secret/);
@@ -74,4 +75,25 @@ test('passes on every field the browser checks, including filters and unsupporte
   assert.deepEqual(request.positions, ['F']);
   assert.equal(request.team, 'BOS');
   assert.deepEqual(request.unsupported, ['young']);
+});
+
+test('when the first model fails, the backup is asked with its own settings', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push(body);
+    if (body.model === MODELS[0].model) return new Response(JSON.stringify({ error: { message: 'rate-limited upstream' } }), { status: 429 });
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"intent":"off_topic","players":[]}' } }] }), { status: 200 });
+  };
+  const res = await handle(ask({ question: 'q' }), { fetchImpl, key: 'k', store: new Map() });
+  assert.equal(res.status, 200);
+  assert.deepEqual(calls.map((c) => c.model), MODELS.map((m) => m.model));
+  assert.deepEqual(calls[1].reasoning, MODELS[1].reasoning);
+});
+
+test('when every model fails, the box gets an error, not an answer', async () => {
+  const fetchImpl = async () => new Response('{}', { status: 500 });
+  const res = await handle(ask({ question: 'q' }), { fetchImpl, key: 'k', store: new Map() });
+  assert.equal(res.status, 502);
+  assert.equal((await res.json()).error, 'unavailable');
 });
