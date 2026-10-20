@@ -16,7 +16,7 @@ export const CATEGORIES = [
 
 // Yahoo's defaults for a new salary cap league: 12 teams, $200 each, 13 roster
 // spots (PG SG G SF PF F C C Util Util BN BN BN). IL spots aren't bought at auction.
-export const YAHOO_DEFAULTS = { teams: 12, budget: 200, rosterSize: 13, minGames: 20 };
+export const YAHOO_DEFAULTS = { teams: 12, budget: 200, rosterSize: 13, minGames: 15 };
 
 const POOL_PASSES = 4;
 

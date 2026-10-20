@@ -50,7 +50,7 @@ let valuedKey = '';
 function save() {
   try {
     const { league, draft, source, csv, myValues, sort, fit, showDrafted, tab } = state;
-    localStorage.setItem(STORE, JSON.stringify({ league, draft, source, csv, myValues, sort, fit, showDrafted, tab }));
+    localStorage.setItem(STORE, JSON.stringify({ league, draft, source, csv, myValues, sort, fit, showDrafted, tab, minGames15: true }));
   } catch { /* storage full or blocked: keep going in memory */ }
 }
 // Another tab saved (say, picks logged there): take its state so neither tab
@@ -68,6 +68,9 @@ function load() {
     Object.assign(state, saved);
     if (state.source === 'csv' && !state.csv) state.source = 'bundled';
     if (!state.myValues || typeof state.myValues !== 'object') state.myValues = {};
+    // The default minimum games went from 20 to 15 (ADR 0002). A save still on
+    // the old default moves once; a minimum the user set themselves is kept.
+    if (!saved.minGames15 && state.league.minGames === 20) state.league.minGames = YAHOO_DEFAULTS.minGames;
   } catch { /* ignore a corrupt or unreadable save */ }
 }
 
