@@ -84,3 +84,16 @@ test('position and team limits are applied by code and shown in the answer', () 
   assert.match(runRequest(req({ intent: 'best', team: 'XYZ' }), board).answer, /don't know the team/);
   assert.match(checkRequest({ intent: 'best', positions: ['PG'], players: [] }, 'q').problems.join(), /Unknown position/);
 });
+
+test('rookies, who have no stats, never rank in a category but can be asked about', () => {
+  const history = JSON.parse(readFileSync(new URL('../site/data/rookie-history.json', import.meta.url), 'utf8'));
+  const d = simulate(data.players, YAHOO_DEFAULTS, { count: 0, mine: 0, seed: 1 });
+  const { board: rb } = derive(data.players, YAHOO_DEFAULTS, d, { rookieHistory: history });
+  const rookie = rb.available.find((p) => p.rookie);
+  assert.ok(rookie, 'a rookie is priced');
+  const best = runRequest(req({ intent: 'best', category: 'pts', count: 10 }), rb);
+  assert.ok(!best.players.includes(rookie.name));
+  assert.match(runRequest(req({ intent: 'player', players: [rookie.name] }), rb).answer, /draft slot/);
+  const other = rb.available.find((p) => p.z);
+  assert.match(runRequest(req({ intent: 'compare', category: 'pts', players: [rookie.name, other.name] }), rb).answer, /no NBA stats/);
+});

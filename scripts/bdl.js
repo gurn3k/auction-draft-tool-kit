@@ -31,7 +31,16 @@ export function aliasesFor(display, names) {
  * @param names     { [bdlId]: display name } for players better known by another name
  * @param rookieYear draft year of this season's rookies
  */
-export function buildPlayers(averages, active, { names = {}, notes = {}, rookieYear } = {}) {
+export function buildPlayers(averages, active, { names = {}, notes = {}, rookieYear, recent = {} } = {}) {
+  // Games and minutes in recent seasons, for the missed-games discount (ADR 0013).
+  // Only seasons he played in are listed: the data doesn't say why he missed one.
+  const seasonsOf = new Map();
+  for (const season of Object.keys(recent).map(Number).sort((a, b) => a - b)) {
+    for (const { player: p, stats: s } of recent[season]) {
+      if (!seasonsOf.has(p.id)) seasonsOf.set(p.id, []);
+      seasonsOf.get(p.id).push([season, s.gp, s.min]);
+    }
+  }
   const current = new Map(active.map((p) => [p.id, p]));
   const shown = (p) => names[p.id] ?? fullName(p);
   const seen = new Set();
@@ -46,6 +55,7 @@ export function buildPlayers(averages, active, { names = {}, notes = {}, rookieY
       gp: s.gp, mpg: s.min, fgm: s.fgm, fga: s.fga, ftm: s.ftm, fta: s.fta, tpm: s.fg3m,
       pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, tov: s.tov,
       aliases: aliasesFor(name, [name, fullName(p)]),
+      ...(seasonsOf.has(p.id) ? { seasons: seasonsOf.get(p.id) } : {}),
       // A hand-kept note on a season that may mislead (ADR 0010). Never changes a price.
       ...(notes[p.id] ? { note: notes[p.id].note } : {}),
     };
@@ -59,8 +69,32 @@ export function buildPlayers(averages, active, { names = {}, notes = {}, rookieY
       return {
         id: `bdl-${p.id}`, name, age: null, team: p.team.abbreviation, pos: p.position ?? '', jersey: jerseyOf(p), ...EMPTY_STATS,
         added: true, rookie: p.draft_year === rookieYear, aliases: aliasesFor(name, [name, fullName(p)]),
+        // Where he was drafted, for a rookie's draft-slot estimate (ADR 0012).
+        ...(p.draft_year === rookieYear && p.draft_number ? { pick: p.draft_number } : {}),
       };
     });
 
   return [...pool, ...added];
+}
+
+/**
+ * Past rookie seasons, for pricing this year's rookies by draft slot (ADR 0012).
+ * A rookie season is the season that starts in his draft year. Undrafted players
+ * carry no draft year, so they can't be placed and are left out.
+ * @param bySeason { [season]: season_averages/general rows }
+ */
+export function buildRookieHistory(bySeason) {
+  const classes = Object.keys(bySeason).map(Number).sort((a, b) => a - b);
+  const players = [];
+  for (const season of classes) {
+    for (const { player: p, stats: s } of bySeason[season]) {
+      if (p.draft_year !== season || !p.draft_number) continue;
+      players.push({
+        year: season, pick: p.draft_number, gp: s.gp, mpg: s.min, fgm: s.fgm, fga: s.fga, ftm: s.ftm, fta: s.fta,
+        tpm: s.fg3m, pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, tov: s.tov,
+      });
+    }
+  }
+  players.sort((a, b) => a.year - b.year || a.pick - b.pick);
+  return { classes, players };
 }

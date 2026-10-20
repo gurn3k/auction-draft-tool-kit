@@ -2,10 +2,13 @@
 // and current rosters. Needs BALLDONTLIE_API_KEY on a plan with season averages
 // and active players (ADR 0007). Pass --cached to rebuild from the saved copy
 // without fetching.
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { buildPlayers } from './bdl.js';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { buildPlayers, buildRookieHistory } from './bdl.js';
 
 const SEASON = 2025; // balldontlie names a season by the year it starts
+const HISTORY_FROM = 2017; // first draft class in the rookie history (ADR 0012)
+const HISTORY = 'site/data/rookie-history.json';
+const RECENT = 3; // seasons of games played kept per player (ADR 0013)
 const LABEL = '2025-26';
 const ROSTER_SEASON = '2026-27';
 const API = 'https://api.balldontlie.io/v1/';
@@ -54,9 +57,28 @@ if (process.argv.includes('--cached')) {
   await writeFile(`${RAW}/active-players.json`, JSON.stringify(active));
 }
 
+// Past seasons, for the rookie history. Each is saved once and never refetched:
+// a finished season's averages don't change. A missing one is fetched even with
+// --cached when a key is set, as it doesn't change this season's data.
+const bySeason = { [SEASON]: averages };
+for (let season = HISTORY_FROM; season < SEASON; season++) {
+  const file = `${RAW}/season-averages-${season}-regular.json`;
+  const saved = await access(file).then(() => true, () => false);
+  if (saved) bySeason[season] = JSON.parse(await readFile(file, 'utf8'));
+  else if (!process.argv.includes('--cached') || process.env.BALLDONTLIE_API_KEY) {
+    console.log(`Fetching ${season}-${String(season + 1).slice(2)} season averages…`);
+    bySeason[season] = await all(`season_averages/general?season=${season}&season_type=regular&type=base`);
+    await writeFile(file, JSON.stringify(bySeason[season]));
+  }
+}
+const history = buildRookieHistory(bySeason);
+await writeFile(HISTORY, JSON.stringify({ source: 'balldontlie, regular season per-game averages in each draft class\'s first season', ...history }));
+console.log(`Wrote ${history.players.length} rookie seasons from the ${history.classes.join(', ')} draft classes to ${HISTORY}.`);
+
 const { names } = JSON.parse(await readFile(NAMES, 'utf8'));
 const { notes } = JSON.parse(await readFile(NOTES, 'utf8'));
-const players = buildPlayers(averages, active, { names, notes, rookieYear: SEASON + 1 });
+const recent = Object.fromEntries(Object.entries(bySeason).filter(([season]) => Number(season) > SEASON - RECENT));
+const players = buildPlayers(averages, active, { names, notes, rookieYear: SEASON + 1, recent });
 const out = {
   season: LABEL,
   source: `balldontlie, ${LABEL} regular season per-game averages`,

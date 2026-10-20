@@ -128,3 +128,52 @@ test('a value the user sets is kept, and everyone else shares exactly the rest (
   // Values for players who aren't on the board are ignored.
   assert.deepEqual(valuePlayers(data.players, YAHOO_DEFAULTS, { myValues: { nobody: 50 } }).map((p) => p.value), base.map((p) => p.value));
 });
+
+test('rookies are valued from their draft slot, and the total still spends exactly the money (ADR 0012)', () => {
+  const history = JSON.parse(readFileSync(new URL('../site/data/rookie-history.json', import.meta.url), 'utf8'));
+  const v = valuePlayers(data.players, YAHOO_DEFAULTS, { rookieHistory: history });
+  const rookies = v.filter((p) => p.rookie);
+  assert.ok(rookies.length > 0 && rookies.every((p) => !p.z));
+  const top = rookies.filter((p) => p.pick >= 1 && p.pick <= 3);
+  assert.ok(top.every((p) => p.value >= 1 && p.estimate.lo === 1));
+  // A higher pick is never valued below a later one.
+  const byPick = rookies.filter((p) => p.pick).sort((a, b) => a.pick - b.pick);
+  for (let i = 1; i < byPick.length; i++) assert.ok(byPick[i].value <= byPick[i - 1].value + 1e-9, byPick[i].name);
+  const priced = v.filter((p) => p.value > 0);
+  assert.equal(priced.length, rosterSpots(YAHOO_DEFAULTS));
+  assert.ok(Math.abs(priced.reduce((a, p) => a + p.value, 0) - YAHOO_DEFAULTS.teams * YAHOO_DEFAULTS.budget) < 1e-6);
+  // Every rookie, even one estimated at $0 or undrafted, can be priced by hand.
+  const zero = rookies.find((p) => p.value === 0);
+  const mine = valuePlayers(data.players, YAHOO_DEFAULTS, { rookieHistory: history, myValues: { [zero.id]: 6 } });
+  assert.equal(mine.find((p) => p.id === zero.id).value, 6);
+  // Without the history, rookies stay unvalued, as before.
+  assert.ok(!valuePlayers(data.players, YAHOO_DEFAULTS).some((p) => p.rookie));
+});
+
+test('a draft slot estimate counts busts and no-shows as worth nothing extra', () => {
+  const history = { classes: [2020, 2021], players: [make('star', { pick: 1, pts: 30, reb: 10, ast: 8 })].map((p) => ({ ...p, year: 2020 })) };
+  const v = valuePlayers([make('a'), make('b'), make('c'), make('d'), make('e'), { ...make('r'), gp: 0, rookie: true, pick: 2 }], small, { rookieHistory: history });
+  const r = v.find((p) => p.id === 'r');
+  // One hit in six top-3 picks (two classes of three): a 1-in-6 share of his surplus.
+  assert.equal(r.estimate.picks, 6);
+  assert.ok(Math.abs(r.estimate.hit - 1 / 6) < 1e-9);
+});
+
+test('players who miss games as regulars lose 10% of their value above replacement (ADR 0013)', () => {
+  const healthy = make('h', { pts: 25 });
+  const seasons = (gps, mpg = 32) => gps.map((gp, i) => [2023 + i, gp, mpg]);
+  const players = [
+    { ...healthy, seasons: seasons([75, 80, 70]) },
+    { ...make('fragile', { pts: 25 }), seasons: seasons([45, 50, 70]) },
+    { ...make('bench', { pts: 25 }), seasons: seasons([30, 40, 70], 12) }, // few minutes: not counted
+    { ...make('once', { pts: 25 }), seasons: seasons([45, 80, 70]) }, // one short season: not counted
+    make('x'), make('y'), make('z'),
+  ];
+  const v = valuePlayers(players, { ...small, rosterSize: 3 });
+  const get = (id) => v.find((p) => p.id === id);
+  assert.ok(get('fragile').missesGames && !get('bench').missesGames && !get('once').missesGames);
+  assert.ok(get('fragile').value < get('h').value);
+  assert.equal(get('bench').value, get('h').value);
+  const priced = v.filter((p) => p.value > 0);
+  assert.ok(Math.abs(priced.reduce((a, p) => a + p.value, 0) - small.teams * small.budget) < 1e-6);
+});

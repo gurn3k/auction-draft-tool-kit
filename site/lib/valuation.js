@@ -94,9 +94,40 @@ function allocateWithMine(ranked, slots, money, mine) {
 // other roster spot in the league.
 export const myValueRoom = (league, count) => league.teams * league.budget - (rosterSpots(league) - count);
 
+// Missed games (ADR 0013). A player is discounted when, in at least two of the
+// last three seasons, he played as a regular (20+ minutes a game) but in fewer
+// than 60 games. Minutes stand in for "he'd have played if fit", since the data
+// doesn't say why games were missed. The discount takes 10% off his value above
+// replacement, so the money moves to everyone else and totals stay exact.
+export const DURABILITY = { games: 60, minutes: 20, seasons: 2, discount: 0.1 };
+export const shortSeasons = (p) => (p.seasons ?? []).filter(([, gp, mpg]) => mpg >= DURABILITY.minutes && gp < DURABILITY.games);
+export const missesGames = (p) => shortSeasons(p).length >= DURABILITY.seasons;
+
+// Draft-slot ranges for rookie estimates (ADR 0012): top 3, the rest of the top
+// 7, the rest of the lottery, the rest of round 1, and round 2.
+export const ROOKIE_SLOTS = [[1, 3], [4, 7], [8, 14], [15, 30], [31, 60]];
+
+// What a rookie taken in each slot range has been worth, on average, above
+// replacement in his first season, scored against this league's pool. A rookie
+// who didn't play, played under the games minimum, or fell below replacement
+// counts as worth nothing extra: a team would drop him for a free agent.
+export function rookieSlotEstimates(history, pool, categories, replacementTotal, minGames) {
+  const played = scorePool(history.players.filter((p) => p.gp >= minGames), pool, categories);
+  return ROOKIE_SLOTS.map(([lo, hi]) => {
+    const picks = (hi - lo + 1) * history.classes.length;
+    const inSlot = played.filter((p) => p.pick >= lo && p.pick <= hi);
+    const over = inSlot.map((p) => Math.max(0, p.total - replacementTotal));
+    return {
+      lo, hi, picks, classes: [history.classes[0], history.classes.at(-1)],
+      surplus: over.reduce((a, b) => a + b, 0) / picks,
+      hit: over.filter((x) => x > 0).length / picks,
+    };
+  });
+}
+
 // Pre-draft values. Returns every eligible player, best first, with per-category
 // z-scores, a total and a dollar value (0 for players outside the rostered pool).
-export function valuePlayers(players, league, { categories = CATEGORIES, myValues = {} } = {}) {
+export function valuePlayers(players, league, { categories = CATEGORIES, myValues = {}, rookieHistory = null } = {}) {
   const eligible = players.filter((p) => p.gp >= league.minGames);
   const slots = rosterSpots(league);
   // The averages that z-scores compare against should describe the players who
@@ -107,6 +138,23 @@ export function valuePlayers(players, league, { categories = CATEGORIES, myValue
   for (let i = 0; i < POOL_PASSES; i++) {
     scored = scorePool(eligible, pool, categories).sort((a, b) => b.total - a.total);
     pool = scored.slice(0, slots);
+  }
+  const replacementTotal = scored[slots]?.total ?? scored.at(-1)?.total ?? 0;
+  scored = scored.map((p) => (missesGames(p) && p.total > replacementTotal
+    ? { ...p, total: replacementTotal + (p.total - replacementTotal) * (1 - DURABILITY.discount), missesGames: true }
+    : p)).sort((a, b) => b.total - a.total);
+  // This year's rookies have no NBA stats. Each gets the average surplus of
+  // past rookies from his draft slot (ADR 0012). Those it puts at $0, and
+  // undrafted rookies, sit below everyone, still there to be priced by hand.
+  const rookies = players.filter((p) => p.rookie && p.gp < league.minGames).sort((a, b) => (a.pick ?? 99) - (b.pick ?? 99));
+  if (rookieHistory?.players?.length && rookies.length) {
+    const replacement = replacementTotal;
+    const slotsFor = rookieSlotEstimates(rookieHistory, pool, categories, replacement, league.minGames);
+    const estimated = rookies.map((p) => {
+      const est = p.pick ? slotsFor.find((s) => p.pick >= s.lo && p.pick <= s.hi) : null;
+      return { ...p, total: est?.surplus > 0 ? replacement + est.surplus : -Infinity, ...(est ? { estimate: est } : {}) };
+    });
+    scored = [...scored, ...estimated].sort((a, b) => b.total - a.total);
   }
   const mine = new Map(scored.filter((p) => myValues[p.id] >= 1).map((p) => [p.id, myValues[p.id]]));
   const prices = allocateWithMine(scored, slots, league.teams * league.budget, mine);
@@ -131,7 +179,8 @@ export function livePrices(valued, picks, league) {
   return {
     prices,
     // The best player left who won't get rostered, as allocate() measures it.
-    replacement: available[Math.max(0, slotsLeft)] ?? available.at(-1) ?? null,
+    // Roster fit compares category stats, so a rookie (who has none) is skipped.
+    replacement: available.slice(Math.max(0, slotsLeft)).find((p) => p.z) ?? available.at(-1) ?? null,
     spent,
     moneyLeft,
     slotsLeft,

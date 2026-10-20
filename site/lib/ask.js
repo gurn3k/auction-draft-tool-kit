@@ -24,6 +24,7 @@ Request fields (use null when the question doesn't say):
   "compare": which of two or more players is better, in one category or overall.
   "player": what a player is worth or what he's good at.
   "cannot_answer": needs injuries, trades, news, this season's form or anything beyond last season's stats and the board.
+  A name you don't recognize may be a rookie or a newer player: the board knows every player, so still use the intent the question asks for and copy the name.
   "off_topic": not about this draft.
 - "category": one of fg, ft, tpm, pts, reb, ast, stl, blk, tov (${CATEGORY_WORDS}). If the question names a category but asks for players who help with it, use that category.
 - "maxPrice": the most the player should cost, for "under $X", "for $X or less", "at most $X".
@@ -34,7 +35,7 @@ Request fields (use null when the question doesn't say):
 - "positions": positions the question limits to, from "G" (guards), "F" (forwards), "C" (centers). Empty when it doesn't limit.
 - "team": the NBA team the question limits to, as its abbreviation (BOS, LAL, NYK...).
 - "players": player names exactly as written in the question.
-- "unsupported": every condition in the question that none of the fields above can hold, in a few words each (for example "under 25 years old", "rookies", "good defenders", "plays every night"). Empty when every condition fits a field. Never drop a condition silently: if it doesn't fit, list it here.
+- "unsupported": every condition in the question that none of the fields above can hold, in a few words each (for example "under 25 years old", "rookies", "good defenders", "plays every night"). Empty when every condition fits a field. Words a field already holds aren't conditions: "cheap" or "bargain" with a price, "left" or "available", "good" or "best". Never drop a condition silently: if it doesn't fit, list it here.
 
 Copy numbers from the question only. Never invent one.
 
@@ -166,7 +167,8 @@ export function runRequest(req, board) {
       return decline('cannot_answer', "I only know last season's stats and this draft board, not injuries, trades or news.");
 
     case 'best': {
-      let pool = available.filter(fits);
+      // Rookies have no NBA stats (ADR 0012), so they can't rank in a category.
+      let pool = available.filter((p) => fits(p) && (!cat || p.z));
       if (req.maxPrice != null) pool = pool.filter((p) => p.live <= req.maxPrice);
       if (req.affordable) pool = pool.filter((p) => p.live <= me.maxBid);
       const top = [...pool].sort(cat ? byCat(cat) : byWorth).slice(0, count);
@@ -202,7 +204,7 @@ export function runRequest(req, board) {
       if (!me.picks.length) return reply("Your roster is empty, so there's no weak spot yet. Ask for the best players instead.");
       const order = [...categories].sort((a, b) => totals[a.key] - totals[b.key]);
       const weak = order[0];
-      const top = available.filter((p) => fits(p) && p.live <= me.maxBid).sort(byCat(weak)).slice(0, count);
+      const top = available.filter((p) => fits(p) && p.z && p.live <= me.maxBid).sort(byCat(weak)).slice(0, count);
       return reply(`You're weakest in ${weak.label}, then ${list(order.slice(1, 3).map((c) => c.label))}. Best fixes you can afford${scope ? ` ${scope}` : ''}: ${list(top.map((p) => `${p.name} (${stat(p, weak)}, Live ${money(p.live)})`))}.`, { players: top.map((p) => p.name) });
     }
 
@@ -231,6 +233,8 @@ export function runRequest(req, board) {
     case 'compare': {
       const found = named.filter((n) => n.player && !n.error).map((n) => n.player);
       if (found.length < 2) return reply(named.find((n) => n.error)?.error ?? 'Name two available players to compare.');
+      const rookie = cat && found.find((p) => !p.z);
+      if (rookie) return reply(`${rookie.name} is a rookie with no NBA stats yet, so I can't compare him in ${cat.label}. Ask without the category to compare prices.`);
       const ranked = [...found].sort(cat ? byCat(cat) : byWorth);
       const why = (p) => (cat ? stat(p, cat) : `Bid to ${money(p.bidTo)}`);
       return reply(`${ranked[0].name}${cat ? ` helps more in ${cat.label}` : ' is worth more to you'}: ${list(ranked.map((p) => `${p.name} ${why(p)}`))}.`, { players: ranked.map((p) => p.name) });
@@ -241,8 +245,11 @@ export function runRequest(req, board) {
       if (!n) return reply('Which player? Name him in the question.');
       if (n.error) return reply(n.error);
       const p = n.player;
-      const strong = categories.filter((c) => p.z[c.key] >= 1).sort((a, b) => p.z[b.key] - p.z[a.key]).slice(0, 3);
-      return reply(`${p.name}: Live ${money(p.live)}, Bid to ${money(p.bidTo)}.${strong.length ? ` Strong in ${list(strong.map((c) => c.label))}.` : ''}`, { players: [p.name] });
+      const strong = p.z ? categories.filter((c) => p.z[c.key] >= 1).sort((a, b) => p.z[b.key] - p.z[a.key]).slice(0, 3) : [];
+      // Say where the value comes from when it isn't plain stats (ADRs 0012 and 0013).
+      const basis = p.rookie ? ` Rookie${p.pick ? `, drafted #${p.pick}` : ''}: valued from his draft slot, as he has no NBA stats yet.`
+        : p.missesGames ? ' Value cut 10% for missing games in recent seasons.' : '';
+      return reply(`${p.name}: Live ${money(p.live)}, Bid to ${money(p.bidTo)}.${strong.length ? ` Strong in ${list(strong.map((c) => c.label))}.` : ''}${basis}`, { players: [p.name] });
     }
   }
   return decline('cannot_answer', "I couldn't understand that. Try rephrasing.");

@@ -9,6 +9,10 @@ import { addPick, bidCeiling, categoryTotals, newDraft, teamSummaries } from '..
 import { fitFactor, fitStrength, needWeights, worthToYou } from '../site/lib/fit.js';
 import { boardState } from '../site/lib/ask.js';
 import { nameKey } from '../site/lib/names.js';
+import { readFileSync } from 'node:fs';
+
+// Rookies are priced from their draft slot, as in the app (ADR 0012).
+const ROOKIE_HISTORY = JSON.parse(readFileSync(new URL('../site/data/rookie-history.json', import.meta.url), 'utf8'));
 
 // Small seeded random numbers (mulberry32), so every run builds the same drafts.
 function rng(seed) {
@@ -21,9 +25,9 @@ function rng(seed) {
 }
 
 /** Everything the app would show for this draft: live prices, teams, Bid to. */
-export function derive(players, league, draft) {
+export function derive(players, league, draft, { rookieHistory = null } = {}) {
   const categories = CATEGORIES;
-  const valued = valuePlayers(players, league, { categories });
+  const valued = valuePlayers(players, league, { categories, rookieHistory });
   const live = livePrices(valued, draft.picks, league);
   const teams = teamSummaries(draft, league);
   const me = teams[draft.myTeam];
@@ -69,6 +73,8 @@ export function simulate(players, league, { count, mine, seed }) {
 const STAT_WORDS = { blk: 'shot-blocker', ast: 'passer', tpm: 'three-point shooter', stl: 'steals player', reb: 'rebounder' };
 const CAT_WORDS = { fg: 'field goal percentage', ft: 'free throw percentage', tpm: 'threes', pts: 'points', reb: 'rebounds', ast: 'assists', stl: 'steals', blk: 'blocks', tov: 'turnovers' };
 const top = (xs, by, k) => [...xs].sort((a, b) => by(b) - by(a)).slice(0, k).map((p) => nameKey(p.name));
+// Rookies have no category stats, so they never rank in a category (ADR 0012).
+const zOf = (p, k) => p.z?.[k] ?? -Infinity;
 const first = (r) => nameKey(r.players?.[0] ?? '');
 
 /** Questions for one draft state, each with a check that code can mark. */
@@ -83,7 +89,7 @@ export function casesFor(stage, b) {
   for (const [stat, cap] of CAPS[stage]) {
     const pool = available.filter((p) => p.live <= cap);
     if (!pool.length) continue;
-    const want = top(pool, (p) => p.z[stat], 3);
+    const want = top(pool, (p) => zOf(p, stat), 3);
     add(`best-${stat}`, `Who's the best ${STAT_WORDS[stat]} left for $${cap} or less?`,
       (r) => r.status === 'ok' && want.includes(first(r)), `top 3 by ${stat} with Live ≤ $${cap}: ${want.join(', ')}`,
       { intent: 'best', category: stat, maxPrice: cap });
@@ -105,7 +111,7 @@ export function casesFor(stage, b) {
   const weakest = [...categories].sort((a, b) => totals[a.key] - totals[b.key])[0];
   if (me.picks.length >= 3 && !weakest.negative) {
     const pool = available.filter((p) => p.live <= me.maxBid);
-    const want = top(pool, (p) => p.z[weakest.key], 5);
+    const want = top(pool, (p) => zOf(p, weakest.key), 5);
     add('weakest', 'What is my team weakest in, and who left can I afford that fixes it?',
       (r) => r.status === 'ok' && want.includes(first(r)), `weakest is ${weakest.label}; top 5 affordable: ${want.join(', ')}`, { intent: 'weakest' });
     add('fill', `My team is short on ${CAT_WORDS[weakest.key]}. Who should I go after?`,
@@ -129,7 +135,7 @@ export function casesFor(stage, b) {
   }
 
   // 6. Head to head in one category.
-  const bigs = available.filter((p) => p.z.blk > 0.5).slice(0, 2);
+  const bigs = available.filter((p) => zOf(p, 'blk') > 0.5).slice(0, 2);
   if (bigs.length === 2) {
     const want = nameKey((bigs[0].z.blk >= bigs[1].z.blk ? bigs[0] : bigs[1]).name);
     add('compare', `${bigs[0].name} or ${bigs[1].name}: who helps me more in blocks?`, (r) => r.status === 'ok' && first(r) === want, `more blocks: ${want}`, { intent: 'compare', category: 'blk', players: [bigs[0].name, bigs[1].name] });
@@ -140,6 +146,7 @@ export function casesFor(stage, b) {
   add('unknown', `Is ${star.name} injured right now?`, (r) => ['cannot_answer', 'off_topic'].includes(r.status) && !r.players?.length, 'declines: no injury data', { intent: 'cannot_answer', players: [star.name] });
   if (stage === 'mid') rephrased(b, add);
   if (stage === 'mid') constraints(b, add);
+  if (stage === 'mid') rookies(b, add);
   return cases;
 }
 
@@ -147,9 +154,9 @@ export function casesFor(stage, b) {
 // use, to check the model reads questions rather than matching the examples.
 function rephrased({ available, teams, me }, add) {
   const cheapBigs = available.filter((p) => p.live <= 6);
-  const wantBlk = top(cheapBigs, (p) => p.z.blk, 3);
+  const wantBlk = top(cheapBigs, (p) => zOf(p, 'blk'), 3);
   add('re-rim', 'any cheap rim protectors under 6 bucks?', (r) => r.status === 'ok' && wantBlk.includes(first(r)), `top 3 by blk with Live ≤ $6: ${wantBlk.join(', ')}`, { intent: 'best', category: 'blk', maxPrice: 6 });
-  const wantStl = top(available.filter((p) => p.live <= 10), (p) => p.z.stl, 3);
+  const wantStl = top(available.filter((p) => p.live <= 10), (p) => zOf(p, 'stl'), 3);
   add('re-steals', 'Need steals. Who is the top guy for ten dollars or less, I mean $10?', (r) => r.status === 'ok' && wantStl.includes(first(r)), `top 3 by stl with Live ≤ $10: ${wantStl.join(', ')}`, { intent: 'best', category: 'stl', maxPrice: 10 });
   const p = available[8];
   add('re-verdict', `Should I go to $${p.bidTo + 4} on ${p.name.split(' ').pop()}?`, (r) => r.status === 'ok' && r.verdict === 'pass', `Bid to is $${p.bidTo}`, { intent: 'verdict', price: p.bidTo + 4, players: [p.name.split(' ').pop()] });
@@ -158,7 +165,7 @@ function rephrased({ available, teams, me }, add) {
   const price = available[2].live;
   const canPay = teams.filter((t) => t.index !== me.index && t.maxBid >= price).map((t) => t.name.toLowerCase()).sort();
   add('re-afford', `Can anybody else still afford ${available[2].name} at $${price}?`, (r) => r.status === 'ok' && JSON.stringify((r.teams ?? []).map((t) => t.toLowerCase()).filter((t) => t !== me.name.toLowerCase()).sort()) === JSON.stringify(canPay), `${canPay.length} teams`, { intent: 'afford', price, players: [available[2].name] });
-  const pair = available.filter((x) => x.z.ast > 0.5).slice(0, 2);
+  const pair = available.filter((x) => zOf(x, 'ast') > 0.5).slice(0, 2);
   const wantAst = nameKey((pair[0].z.ast >= pair[1].z.ast ? pair[0] : pair[1]).name);
   add('re-compare', `who dishes more dimes, ${pair[1].name} or ${pair[0].name}`, (r) => r.status === 'ok' && first(r) === wantAst, `more assists: ${wantAst}`, { intent: 'compare', category: 'ast', players: [pair[1].name, pair[0].name] });
   add('re-news', `Did ${available[0].name} sign an extension this summer?`, (r) => ['cannot_answer', 'off_topic'].includes(r.status) && !r.players?.length, 'declines: no news', { intent: 'cannot_answer', players: [available[0].name] });
@@ -168,9 +175,18 @@ function rephrased({ available, teams, me }, add) {
 // Added after a preview user asked "best in assists, forwards only" and the
 // position was silently dropped. Each condition must be applied, or the
 // question declined; never answered without it.
+// Rookies have no NBA stats, so a model may not recognize the name. The board
+// does, and must answer from his draft-slot price.
+function rookies({ available }, add) {
+  const [top, next] = available.filter((p) => p.rookie).sort((a, b) => a.pick - b.pick);
+  add('rookie-player', `Tell me about ${top.name}`, (r) => r.status === 'ok' && /draft slot/.test(r.answer) && r.players[0] === top.name, 'answers from his draft-slot price', { intent: 'player', players: [top.name] });
+  const price = next.bidTo + 4;
+  add('rookie-verdict', `Should I pay $${price} for ${next.name}?`, (r) => r.verdict === 'pass', `pass: over his Bid to of $${next.bidTo}`, { intent: 'verdict', price, players: [next.name] });
+}
+
 function constraints({ available }, add) {
   const has = (p, x) => (p.pos ?? '').includes(x);
-  const filtered = (f, cat) => top(available.filter(f), (p) => p.z[cat], 3);
+  const filtered = (f, cat) => top(available.filter(f), (p) => zOf(p, cat), 3);
   const best = (id, question, f, cat, gold) => {
     const want = filtered(f, cat);
     add(id, question, (r) => r.status === 'ok' && want.includes(first(r)), `top 3 by ${cat} where filtered: ${want.join(', ')}`, gold);
@@ -190,7 +206,7 @@ function constraints({ available }, add) {
 export function allCases(players, league = YAHOO_DEFAULTS) {
   const stages = [['early', { count: 10, mine: 1, seed: 1 }], ['mid', { count: 60, mine: 5, seed: 2 }], ['late', { count: 130, mine: 11, seed: 3 }]];
   return stages.flatMap(([stage, opts]) => {
-    const b = derive(players, league, simulate(players, league, opts));
+    const b = derive(players, league, simulate(players, league, opts), { rookieHistory: ROOKIE_HISTORY });
     return casesFor(stage, b).map((c) => ({ ...c, board: b.board }));
   });
 }
