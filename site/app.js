@@ -315,6 +315,19 @@ $('players-body').addEventListener('keydown', (e) => {
   if (td && e.target === td && (e.key === 'Enter' || e.key === 'F2')) { e.preventDefault(); editValueCell(td); }
 });
 
+// ---------- how it works ----------
+// Opens by itself on a first visit only; "How it works" reopens it any time.
+const HELP_SEEN = 'cap-drafter:help-seen';
+$('help-open').addEventListener('click', () => $('help').showModal());
+$('help').addEventListener('close', () => {
+  try { localStorage.setItem(HELP_SEEN, '1'); } catch { /* storage blocked: it shows again next time */ }
+});
+function welcome() {
+  let seen = false;
+  try { seen = localStorage.getItem(HELP_SEEN) === '1'; } catch { /* treat as a first visit */ }
+  if (!seen && !$('help').open) $('help').showModal();
+}
+
 $('csv-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -910,3 +923,5 @@ $('show-drafted').checked = state.showDrafted;
 if (state.draft.picks.length) $('setup').open = false;
 fillSetup();
 render();
+// Never interrupt a draft already under way.
+if (!state.draft.picks.length) welcome();
