@@ -1,6 +1,6 @@
 // Draft-room UI. All the maths lives in lib/; this file reads the forms, keeps
 // state in memory (and in localStorage as a convenience) and renders.
-import { CATEGORIES, YAHOO_DEFAULTS, livePrices, myValueRoom, rosterSpots, valuePlayers } from './lib/valuation.js';
+import { CATEGORIES, DURABILITY, YAHOO_DEFAULTS, livePrices, myValueRoom, rosterSpots, shortSeasons, valuePlayers } from './lib/valuation.js';
 import { SCARCE_LEFT, addPick, bidCeiling, categorySupply, categoryTotals, checkPick, newDraft, removePick, scarceStrengths, teamSummaries } from './lib/draft.js';
 import { projectionsFromCsv } from './lib/csv.js';
 import { fitDrivers, fitFactor, fitStrength, needWeights, worthToYou } from './lib/fit.js';
@@ -490,6 +490,14 @@ function renderHead() {
   }, c.label, c.key === key ? el('span', { class: `caret ${dir < 0 ? 'down' : 'up'}`, 'aria-hidden': 'true' }) : ''))));
 }
 
+// "under 60 games as a regular in 2024-25 (47) and 2025-26 (42)" (ADR 0013)
+const seasonLabel = (s) => `${s}-${String(s + 1).slice(2)}`;
+function missedText(p) {
+  const short = shortSeasons(p).map(([s, gp]) => `${seasonLabel(s)} (${gp})`);
+  const joined = short.length > 1 ? `${short.slice(0, -1).join(', ')} and ${short.at(-1)}` : short[0];
+  return `under ${DURABILITY.games} games as a regular in ${joined}`;
+}
+
 const searchHit = (p, q) => !q || fold(`${p.name} ${(p.aliases ?? []).join(' ')} ${p.team ?? ''} ${p.pos ?? ''}`).includes(q);
 
 let lastLive = new Map(); // player id → the rounded live price last shown
@@ -539,7 +547,8 @@ function renderBoard({ v, board, live, me, fit, repriced }) {
       el('span', { class: 'nm' }, p.name), el('span', { class: 'meta' }, teamLabel(p)),
       p.rookie ? el('span', { class: 'tag', title: p.estimate ? `No NBA stats yet: valued from his draft slot (#${p.estimate.lo}–${p.estimate.hi})` : 'Undrafted, with no NBA stats: no estimate' }, p.pick ? `Rookie · #${p.pick}` : 'Rookie')
         : p.added ? el('span', { class: 'tag', title: 'On a 2026-27 roster, with no 2025-26 stats to value' }, 'No 2025-26 stats')
-        : !p.z ? el('span', { class: 'tag', title: `Played fewer than the ${state.league.minGames} games needed to be valued` }, `${p.gp} GP`) : null),
+        : !p.z ? el('span', { class: 'tag', title: `Played fewer than the ${state.league.minGames} games needed to be valued` }, `${p.gp} GP`)
+          : p.missesGames ? el('span', { class: 'tag', title: `Value cut ${DURABILITY.discount * 100}% above replacement: ${missedText(p)}` }, 'Missed games') : null),
     (p.z || p.rookie) && !pick
       ? el('td', { class: p.mine ? 'val mine' : 'val', 'data-edit': '', tabindex: 0, title: p.mine ? 'Your value. Click to change; empty it to clear.' : 'Click to set your own value' }, p.value >= 0.5 ? money(p.value) : '—')
       : el('td', { class: p.mine ? 'val mine' : 'val' }, p.value >= 0.5 ? money(p.value) : '—'),
@@ -761,6 +770,7 @@ function renderBlock({ board, live, me, teams, fit }) {
       lv >= 0.5 ? ` ${afford === open.length ? 'Every team' : `${afford} of ${open.length} teams`} can still afford him at Live.` : '',
     ].join('');
   }
+  if (p.missesGames) note += ` Value cut ${DURABILITY.discount * 100}% for missed games: ${missedText(p)}.`;
   $('b-note').textContent = note;
   // A hand-kept note (ADR 0010): context on the data, never a change to the price.
   $('b-flag').hidden = !p.note;

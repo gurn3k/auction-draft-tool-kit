@@ -94,6 +94,15 @@ function allocateWithMine(ranked, slots, money, mine) {
 // other roster spot in the league.
 export const myValueRoom = (league, count) => league.teams * league.budget - (rosterSpots(league) - count);
 
+// Missed games (ADR 0013). A player is discounted when, in at least two of the
+// last three seasons, he played as a regular (20+ minutes a game) but in fewer
+// than 60 games. Minutes stand in for "he'd have played if fit", since the data
+// doesn't say why games were missed. The discount takes 10% off his value above
+// replacement, so the money moves to everyone else and totals stay exact.
+export const DURABILITY = { games: 60, minutes: 20, seasons: 2, discount: 0.1 };
+export const shortSeasons = (p) => (p.seasons ?? []).filter(([, gp, mpg]) => mpg >= DURABILITY.minutes && gp < DURABILITY.games);
+export const missesGames = (p) => shortSeasons(p).length >= DURABILITY.seasons;
+
 // Draft-slot ranges for rookie estimates (ADR 0012): top 3, the rest of the top
 // 7, the rest of the lottery, the rest of round 1, and round 2.
 export const ROOKIE_SLOTS = [[1, 3], [4, 7], [8, 14], [15, 30], [31, 60]];
@@ -130,12 +139,16 @@ export function valuePlayers(players, league, { categories = CATEGORIES, myValue
     scored = scorePool(eligible, pool, categories).sort((a, b) => b.total - a.total);
     pool = scored.slice(0, slots);
   }
+  const replacementTotal = scored[slots]?.total ?? scored.at(-1)?.total ?? 0;
+  scored = scored.map((p) => (missesGames(p) && p.total > replacementTotal
+    ? { ...p, total: replacementTotal + (p.total - replacementTotal) * (1 - DURABILITY.discount), missesGames: true }
+    : p)).sort((a, b) => b.total - a.total);
   // This year's rookies have no NBA stats. Each gets the average surplus of
   // past rookies from his draft slot (ADR 0012). Those it puts at $0, and
   // undrafted rookies, sit below everyone, still there to be priced by hand.
   const rookies = players.filter((p) => p.rookie && p.gp < league.minGames).sort((a, b) => (a.pick ?? 99) - (b.pick ?? 99));
   if (rookieHistory?.players?.length && rookies.length) {
-    const replacement = scored[slots]?.total ?? scored.at(-1)?.total ?? 0;
+    const replacement = replacementTotal;
     const slotsFor = rookieSlotEstimates(rookieHistory, pool, categories, replacement, league.minGames);
     const estimated = rookies.map((p) => {
       const est = p.pick ? slotsFor.find((s) => p.pick >= s.lo && p.pick <= s.hi) : null;

@@ -158,3 +158,22 @@ test('a draft slot estimate counts busts and no-shows as worth nothing extra', (
   assert.equal(r.estimate.picks, 6);
   assert.ok(Math.abs(r.estimate.hit - 1 / 6) < 1e-9);
 });
+
+test('players who miss games as regulars lose 10% of their value above replacement (ADR 0013)', () => {
+  const healthy = make('h', { pts: 25 });
+  const seasons = (gps, mpg = 32) => gps.map((gp, i) => [2023 + i, gp, mpg]);
+  const players = [
+    { ...healthy, seasons: seasons([75, 80, 70]) },
+    { ...make('fragile', { pts: 25 }), seasons: seasons([45, 50, 70]) },
+    { ...make('bench', { pts: 25 }), seasons: seasons([30, 40, 70], 12) }, // few minutes: not counted
+    { ...make('once', { pts: 25 }), seasons: seasons([45, 80, 70]) }, // one short season: not counted
+    make('x'), make('y'), make('z'),
+  ];
+  const v = valuePlayers(players, { ...small, rosterSize: 3 });
+  const get = (id) => v.find((p) => p.id === id);
+  assert.ok(get('fragile').missesGames && !get('bench').missesGames && !get('once').missesGames);
+  assert.ok(get('fragile').value < get('h').value);
+  assert.equal(get('bench').value, get('h').value);
+  const priced = v.filter((p) => p.value > 0);
+  assert.ok(Math.abs(priced.reduce((a, p) => a + p.value, 0) - small.teams * small.budget) < 1e-6);
+});

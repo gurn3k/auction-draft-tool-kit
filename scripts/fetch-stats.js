@@ -8,6 +8,7 @@ import { buildPlayers, buildRookieHistory } from './bdl.js';
 const SEASON = 2025; // balldontlie names a season by the year it starts
 const HISTORY_FROM = 2017; // first draft class in the rookie history (ADR 0012)
 const HISTORY = 'site/data/rookie-history.json';
+const RECENT = 3; // seasons of games played kept per player (ADR 0013)
 const LABEL = '2025-26';
 const ROSTER_SEASON = '2026-27';
 const API = 'https://api.balldontlie.io/v1/';
@@ -76,7 +77,8 @@ console.log(`Wrote ${history.players.length} rookie seasons from the ${history.c
 
 const { names } = JSON.parse(await readFile(NAMES, 'utf8'));
 const { notes } = JSON.parse(await readFile(NOTES, 'utf8'));
-const players = buildPlayers(averages, active, { names, notes, rookieYear: SEASON + 1 });
+const recent = Object.fromEntries(Object.entries(bySeason).filter(([season]) => Number(season) > SEASON - RECENT));
+const players = buildPlayers(averages, active, { names, notes, rookieYear: SEASON + 1, recent });
 const out = {
   season: LABEL,
   source: `balldontlie, ${LABEL} regular season per-game averages`,
