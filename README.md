@@ -42,7 +42,7 @@ I recorded each decision as an ADR while I built, including the ones that revers
 
 ## How I know the numbers are right
 
-- **The maths is tested.** 48 tests run with `npm test`. They check that values add up to exactly teams × budget, that live prices share out exactly the money left, that illegal picks are refused, and that CSV import and name matching work.
+- **The maths is tested.** 65 tests run with `npm test`. They check that values add up to exactly teams × budget, that live prices share out exactly the money left, that illegal picks are refused, and that CSV import and name matching work.
 - **The data is cross-checked.** Moving to licensed data changed no one's value. With Yahoo defaults: Nikola Jokić $71, Victor Wembanyama $66, Shai Gilgeous-Alexander $61, and 156 players priced at exactly $2,400.
 - **It has been used in a live draft run.** I ran it beside a Yahoo draft room on 2026-10-18.
 
