@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { aliasesFor, buildPlayers } from '../scripts/bdl.js';
+import { aliasesFor, buildPlayers, buildRookieHistory } from '../scripts/bdl.js';
 import { YAHOO_DEFAULTS, valuePlayers } from '../site/lib/valuation.js';
 
 const player = (id, first, last, extra = {}) => ({ id, first_name: first, last_name: last, position: 'G', draft_year: 2020, jersey_number: '7', ...extra });
@@ -65,4 +65,18 @@ test('the bundled data adds up: every roster spot priced, $2,400 in a Yahoo-defa
   const priced = v.filter((p) => p.value >= 1);
   assert.equal(priced.length, YAHOO_DEFAULTS.teams * YAHOO_DEFAULTS.rosterSize);
   assert.equal(Math.round(priced.reduce((a, p) => a + p.value, 0)), YAHOO_DEFAULTS.teams * YAHOO_DEFAULTS.budget);
+});
+
+test('rookie history keeps each draft class in its first season, by pick, and skips the undrafted', () => {
+  const row = (id, draft_year, draft_number) => ({ player: player(id, 'A', `P${id}`, { draft_year, draft_number }), stats });
+  const h = buildRookieHistory({ 2021: [row(1, 2021, 5), row(2, 2020, 1), row(3, null, null)], 2022: [row(4, 2022, 31), row(1, 2021, 5)] });
+  assert.deepEqual(h.classes, [2021, 2022]);
+  assert.deepEqual(h.players.map((p) => [p.year, p.pick]), [[2021, 5], [2022, 31]]);
+  assert.equal(h.players[0].tpm, stats.fg3m);
+});
+
+test('a rookie keeps his draft pick', () => {
+  const [p] = buildPlayers([], [{ ...player(9, 'New', 'Guy', { draft_year: 2026, draft_number: 4 }), team: team('BOS') }], { rookieYear: 2026 });
+  assert.equal(p.rookie, true);
+  assert.equal(p.pick, 4);
 });

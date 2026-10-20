@@ -42,6 +42,7 @@ const state = {
   selected: null,
 };
 let bundled = { players: [], season: '', source: '' };
+let rookieHistory = null; // past rookie seasons, for draft-slot estimates (ADR 0012)
 let valued = [];
 let valuedKey = '';
 
@@ -78,9 +79,11 @@ const supplyCats = () => cats().filter((c) => !c.negative);
 const cats = () => CATEGORIES.filter((c) => (state.league.categories ?? CATEGORIES.map((x) => x.key)).includes(c.key));
 
 function getValued() {
-  const key = JSON.stringify([state.source, state.csv?.name, state.csv?.players.length, state.league, state.myValues]);
+  // Rookie estimates come with the bundled data; a CSV brings its own projections.
+  const history = state.source === 'csv' ? null : rookieHistory;
+  const key = JSON.stringify([state.source, state.csv?.name, state.csv?.players.length, state.league, state.myValues, !!history]);
   if (key !== valuedKey) {
-    valued = valuePlayers(players(), state.league, { categories: cats(), myValues: state.myValues });
+    valued = valuePlayers(players(), state.league, { categories: cats(), myValues: state.myValues, rookieHistory: history });
     valuedKey = key;
   }
   return valued;
@@ -534,9 +537,10 @@ function renderBoard({ v, board, live, me, fit, repriced }) {
     el('td', { class: 'rk' }, p.rank ?? '—'),
     el('td', { class: 'player', title: p.aliases?.length ? `Also listed as ${p.aliases.join(', ')}` : null },
       el('span', { class: 'nm' }, p.name), el('span', { class: 'meta' }, teamLabel(p)),
-      p.added ? el('span', { class: 'tag', title: 'On a 2026-27 roster, with no 2025-26 stats to value' }, p.rookie ? 'Rookie' : 'No 2025-26 stats')
+      p.rookie ? el('span', { class: 'tag', title: p.estimate ? `No NBA stats yet: valued from his draft slot (#${p.estimate.lo}–${p.estimate.hi})` : 'Undrafted, with no NBA stats: no estimate' }, p.pick ? `Rookie · #${p.pick}` : 'Rookie')
+        : p.added ? el('span', { class: 'tag', title: 'On a 2026-27 roster, with no 2025-26 stats to value' }, 'No 2025-26 stats')
         : !p.z ? el('span', { class: 'tag', title: `Played fewer than the ${state.league.minGames} games needed to be valued` }, `${p.gp} GP`) : null),
-    p.z && !pick
+    (p.z || p.rookie) && !pick
       ? el('td', { class: p.mine ? 'val mine' : 'val', 'data-edit': '', tabindex: 0, title: p.mine ? 'Your value. Click to change; empty it to clear.' : 'Click to set your own value' }, p.value >= 0.5 ? money(p.value) : '—')
       : el('td', { class: p.mine ? 'val mine' : 'val' }, p.value >= 0.5 ? money(p.value) : '—'),
     liveCell,
@@ -544,7 +548,7 @@ function renderBoard({ v, board, live, me, fit, repriced }) {
     ...cats().map((c, i) => (p.z
       ? el('td', { class: `cat ${zClass(p.z[c.key])}${i === 0 ? ' sep' : ''}` }, fmtZ(p.z[c.key]))
       : el('td', { class: `cat${i === 0 ? ' sep' : ''}` }, ''))),
-    el('td', { class: 'sep' }, p.total == null ? '—' : fmtZ(p.total)),
+    el('td', { class: 'sep' }, p.z ? fmtZ(p.total) : '—'),
     el('td', {}, p.added ? '—' : p.gp),
     el('td', {}, p.mpg ? p.mpg.toFixed(1) : '—'));
   }));
@@ -736,7 +740,12 @@ function renderBlock({ board, live, me, teams, fit }) {
   $('b-cats').replaceChildren(...(p.z ? cats().map((c) => el('span', { class: zClass(p.z[c.key]) || null }, el('small', {}, c.label), fmtZ(p.z[c.key]))) : []));
   const list = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}` : xs[0]);
   let note;
-  if (!p.z && !p.added) {
+  if (p.rookie) {
+    const e = p.estimate;
+    note = e
+      ? `Rookie, drafted #${p.pick}. With no NBA stats yet, his value is estimated from his draft slot: of ${e.picks} players taken #${e.lo}–${e.hi} in the ${e.classes[0]}–${e.classes[1]} drafts, ${Math.round(e.hit * 100)}% were worth a roster spot as rookies. Know more? Set your own value.`
+      : 'Undrafted rookie with no NBA stats, so there’s no estimate. Set your own value to price him.';
+  } else if (!p.z && !p.added) {
     note = `Only ${p.gp} games in 2025-26, under your ${state.league.minGames}-game minimum, so he has no value here. Lower the minimum to price him, or log him by name if he sells.`;
   } else if (!p.z) {
     note = 'No 2025-26 stats, so he has no value here. If he sells, log him by name to keep the budgets right.';
@@ -768,7 +777,7 @@ function renderBlock({ board, live, me, teams, fit }) {
   // Users can price a valued player themselves (ADR 0011); the rest re-share around it.
   $('b-value').classList.toggle('mine', !!p.mine);
   $('b-value-label').textContent = p.mine ? 'My value' : 'Pre-draft';
-  $('my-value-form').hidden = !p.z;
+  $('my-value-form').hidden = !(p.z || p.rookie);
   if (document.activeElement !== $('my-value')) $('my-value').value = p.mine ? Math.round(p.value) : '';
   $('my-value-clear').hidden = !p.mine;
   $('b-live').textContent = lv >= 0.5 ? money(lv) : '—';
@@ -875,6 +884,8 @@ $('show-drafted').addEventListener('change', (e) => { state.showDrafted = e.targ
 load();
 try {
   bundled = await (await fetch('data/players.json')).json();
+  // Optional: without it, rookies are simply listed unpriced, as before.
+  rookieHistory = await fetch('data/rookie-history.json').then((r) => (r.ok ? r.json() : null), () => null);
 } catch {
   logMsg('Could not load the bundled player data. Upload a projections CSV in League setup.', 'error');
 }
@@ -883,7 +894,7 @@ $('data-note').replaceChildren(
   'Bundled data: ', el('a', { href: bundled.sourceUrl || '#' }, bundled.source || 'unavailable'),
   bundled.fetchedAt ? `, fetched ${bundled.fetchedAt}.` : '',
   bundled.rostersUpdatedAt
-    ? ` Teams from ${bundled.rosterSeason} rosters, ${bundled.rostersUpdatedAt.slice(0, 10)}. Rostered players missing from those stats (mostly rookies) are listed without values.`
+    ? ` Teams from ${bundled.rosterSeason} rosters, ${bundled.rostersUpdatedAt.slice(0, 10)}. Rookies are valued from their draft slot (what past rookies taken there were worth); other rostered players missing from those stats are listed without values.`
     : " Teams are where each player finished last season.");
 $('show-drafted').checked = state.showDrafted;
 if (state.draft.picks.length) $('setup').open = false;

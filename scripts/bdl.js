@@ -59,8 +59,32 @@ export function buildPlayers(averages, active, { names = {}, notes = {}, rookieY
       return {
         id: `bdl-${p.id}`, name, age: null, team: p.team.abbreviation, pos: p.position ?? '', jersey: jerseyOf(p), ...EMPTY_STATS,
         added: true, rookie: p.draft_year === rookieYear, aliases: aliasesFor(name, [name, fullName(p)]),
+        // Where he was drafted, for a rookie's draft-slot estimate (ADR 0012).
+        ...(p.draft_year === rookieYear && p.draft_number ? { pick: p.draft_number } : {}),
       };
     });
 
   return [...pool, ...added];
+}
+
+/**
+ * Past rookie seasons, for pricing this year's rookies by draft slot (ADR 0012).
+ * A rookie season is the season that starts in his draft year. Undrafted players
+ * carry no draft year, so they can't be placed and are left out.
+ * @param bySeason { [season]: season_averages/general rows }
+ */
+export function buildRookieHistory(bySeason) {
+  const classes = Object.keys(bySeason).map(Number).sort((a, b) => a - b);
+  const players = [];
+  for (const season of classes) {
+    for (const { player: p, stats: s } of bySeason[season]) {
+      if (p.draft_year !== season || !p.draft_number) continue;
+      players.push({
+        year: season, pick: p.draft_number, gp: s.gp, mpg: s.min, fgm: s.fgm, fga: s.fga, ftm: s.ftm, fta: s.fta,
+        tpm: s.fg3m, pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, tov: s.tov,
+      });
+    }
+  }
+  players.sort((a, b) => a.year - b.year || a.pick - b.pick);
+  return { classes, players };
 }
