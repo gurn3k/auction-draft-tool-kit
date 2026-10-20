@@ -6,7 +6,7 @@ Status: accepted, 2026-10-16. Code: `site/lib/valuation.js`.
 
 Values use standard z-score valuation for head-to-head categories, then a value-over-replacement split of the league's money.
 
-1. **Eligible players:** those with at least the minimum games (default 20).
+1. **Eligible players:** those with at least the minimum games (default 15; it was 20 until 2026-10-20, when it was lowered so players back from a short injured season, like Jayson Tatum at 16 games, are priced, while 3–5 game samples still aren't).
 2. **Category scores.** For counting stats (3PM, PTS, REB, AST, STL, BLK, TO), the score is the player's per-game number. For FG% and FT%, it is **impact**: makes minus what an average shooter in the pool would make on the same attempts (`made − poolPct × attempts`). A 60% shooter on 20 attempts moves a team's FG% far more than one on 5, and impact captures that.
 3. **z-scores** for each category, measured against the **drafted pool**, not the whole league. The pool is the top `teams × roster spots` players, re-computed 4 times until it settles. Turnovers are negated.
 4. **Total** = the sum of the 9 z-scores, with every category weighted equally.
