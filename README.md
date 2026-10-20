@@ -38,12 +38,13 @@ I recorded each decision as an ADR while I built, including the ones that revers
 | [0010 Notes, not hand-set prices](docs/adr/0010-player-notes.md) | I set one player's price by hand after a season that looked like an anomaly, then reversed it: prices stay computed from data for everyone, and a note on his card flags the anomaly instead. |
 | [0011 My values](docs/adr/0011-my-values.md) | Users can type their own price for any player instead of uploading a whole CSV. Everyone else is re-priced around it, so totals still add up to the league's money. |
 | [0012 Rookie values](docs/adr/0012-rookie-values.md) | Rookies have no NBA stats. They're priced from what past rookies taken in the same draft slot were worth, busts included, by the same method as everyone else. Users can still set their own. |
+| [0013 Missed games](docs/adr/0013-missed-games.md) | Per-game averages ignore availability. Players who were regulars but played under 60 games in 2 of the last 3 seasons lose 10% of their value above replacement. The data doesn't say why games were missed, so the rule uses minutes to tell injuries from bench roles. |
 
 [PRD.md](PRD.md) has the scope, success criteria and what's deliberately out.
 
 ## How I know the numbers are right
 
-- **The maths is tested.** 52 tests run with `npm test`. They check that values add up to exactly teams × budget, that live prices share out exactly the money left, that illegal picks are refused, and that CSV import and name matching work.
+- **The maths is tested.** 54 tests run with `npm test`. They check that values add up to exactly teams × budget, that live prices share out exactly the money left, that illegal picks are refused, and that CSV import and name matching work.
 - **The data is cross-checked.** Moving to licensed data changed no one's value. With Yahoo defaults: Nikola Jokić $71, Victor Wembanyama $66, Shai Gilgeous-Alexander $61, and 156 players priced at exactly $2,400.
 - **It has been used in a live draft run.** I ran it beside a Yahoo draft room on 2026-10-18.
 

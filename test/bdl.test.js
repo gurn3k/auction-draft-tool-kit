@@ -80,3 +80,9 @@ test('a rookie keeps his draft pick', () => {
   assert.equal(p.rookie, true);
   assert.equal(p.pick, 4);
 });
+
+test('recent seasons list games and minutes for the seasons a player appeared in', () => {
+  const row = (id, gp, min) => ({ player: player(id, 'A', 'B'), stats: { ...stats, gp, min } });
+  const [p] = buildPlayers([row(1, 70, 34)], [], { recent: { 2024: [row(1, 40, 31)], 2025: [row(1, 70, 34)] } });
+  assert.deepEqual(p.seasons, [[2024, 40, 31], [2025, 70, 34]]);
+});
