@@ -1,0 +1,6 @@
+{
+  "_readme": "Hand-kept, read by scripts/fetch-stats.js (ADR 0010). A note shown on a player's card when last season's numbers may mislead. Notes never change stats or prices. Keys are balldontlie player ids.",
+  "notes": {
+    "666849": { "name": "Kevin Porter Jr.", "note": "His 2025-26 numbers may be an anomaly: 2.2 steals a game over only 38 games. His price is based on them as they are." }
+  }
+}

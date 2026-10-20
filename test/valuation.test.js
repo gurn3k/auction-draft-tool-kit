@@ -24,9 +24,7 @@ test('every rostered player is worth at least $1, and values fall with rank', ()
   const v = valuePlayers(data.players, YAHOO_DEFAULTS);
   const rostered = v.slice(0, 156);
   assert.ok(rostered.every((p) => p.value >= 1));
-  // Hand-set values (ADR 0010) are the deliberate exception to rank order.
-  const computed = rostered.filter((p) => !p.setValue);
-  for (let i = 1; i < computed.length; i++) assert.ok(computed[i].value <= computed[i - 1].value);
+  for (let i = 1; i < rostered.length; i++) assert.ok(rostered[i].value <= rostered[i - 1].value);
 });
 
 test('values scale with the budget the commissioner sets', () => {
@@ -99,21 +97,34 @@ test('live prices still share out all the money left', () => {
   assert.ok(Math.abs(total - live.moneyLeft) < 1e-6);
 });
 
-test('a hand-set value is kept, and everyone else still shares exactly the rest (ADR 0010)', () => {
-  const data = JSON.parse(readFileSync(new URL('../site/data/players.json', import.meta.url), 'utf8'));
-  const v = valuePlayers(data.players, YAHOO_DEFAULTS);
-  const set = v.filter((p) => p.setValue);
-  assert.ok(set.length > 0);
-  for (const p of set) assert.equal(p.value, p.setValue.value);
-  const priced = v.filter((p) => p.value >= 1);
+test('a player note is context only: it never changes a price (ADR 0010)', () => {
+  const noted = data.players.filter((p) => p.note);
+  assert.ok(noted.length > 0);
+  const plain = data.players.map(({ note, ...p }) => p);
+  const a = valuePlayers(data.players, YAHOO_DEFAULTS);
+  const b = new Map(valuePlayers(plain, YAHOO_DEFAULTS).map((p) => [p.id, p.value]));
+  for (const p of a) assert.equal(p.value, b.get(p.id));
+});
+
+test('a value the user sets is kept, and everyone else shares exactly the rest (ADR 0011)', () => {
+  const base = valuePlayers(data.players, YAHOO_DEFAULTS);
+  const [star, , , mid] = base;
+  const deep = base[300];
+  const myValues = { [star.id]: 20, [deep.id]: 5 };
+  const v = valuePlayers(data.players, YAHOO_DEFAULTS, { myValues });
+  const get = (id) => v.find((p) => p.id === id);
+  assert.equal(get(star.id).value, 20);
+  assert.equal(get(deep.id).value, 5); // outside the rostered pool, but priced by the user
+  assert.ok(get(star.id).mine && !get(mid.id).mine);
+  assert.ok(get(mid.id).value > mid.value); // the money freed up goes to others
+  const priced = v.filter((p) => p.value > 0);
   assert.equal(priced.length, rosterSpots(YAHOO_DEFAULTS));
-  assert.equal(Math.round(priced.reduce((a, p) => a + p.value, 0)), YAHOO_DEFAULTS.teams * YAHOO_DEFAULTS.budget);
-  // It scales with the budget, and stays put as the room inflates.
-  const half = valuePlayers(data.players, { ...YAHOO_DEFAULTS, budget: 100 });
-  assert.equal(half.find((p) => p.id === set[0].id).value, Math.round(set[0].setValue.value / 2));
-  const picks = [{ playerId: v[0].id, price: 120, team: 1 }];
-  const live = livePrices(v, picks, YAHOO_DEFAULTS);
-  assert.equal(live.prices.get(set[0].id), set[0].value);
+  assert.ok(Math.abs(priced.reduce((a, p) => a + p.value, 0) - YAHOO_DEFAULTS.teams * YAHOO_DEFAULTS.budget) < 1e-6);
+  // Live, it stays put while the rest re-share the money left.
+  const live = livePrices(v, [{ playerId: mid.id, price: 90, team: 1 }], YAHOO_DEFAULTS);
+  assert.equal(live.prices.get(star.id), 20);
   const total = [...live.prices.values()].reduce((a, b) => a + b, 0);
-  assert.equal(Math.round(total), live.moneyLeft);
+  assert.ok(Math.abs(total - live.moneyLeft) < 1e-6);
+  // Values for players who aren't on the board are ignored.
+  assert.deepEqual(valuePlayers(data.players, YAHOO_DEFAULTS, { myValues: { nobody: 50 } }).map((p) => p.value), base.map((p) => p.value));
 });

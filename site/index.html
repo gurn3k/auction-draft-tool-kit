@@ -60,6 +60,7 @@
             <a href="data/projections-template.csv" download>Template</a>
           </div>
           <p class="csv-status" id="csv-status" role="status"></p>
+          <p class="csv-status my-values-status" id="my-values-status" hidden><span id="my-values-count"></span></p>
         </fieldset>
         <fieldset class="cats-pick">
           <legend>Categories <span class="hint">the ones your league scores</span></legend>
@@ -97,10 +98,17 @@
         <div class="b-title"><h1 id="b-name"></h1><span class="b-meta" id="b-meta"></span></div>
         <div class="b-cats" id="b-cats"></div>
         <p class="b-scarce" id="b-scarce" hidden></p>
+        <p class="b-flag" id="b-flag" hidden></p>
         <p class="b-note" id="b-note"></p>
       </div>
       <div class="b-prices">
-        <div><span class="b-label">Pre-draft</span><b class="b-value" id="b-value"></b></div>
+        <div><span class="b-label" id="b-value-label">Pre-draft</span><b class="b-value" id="b-value"></b>
+          <form class="my-value" id="my-value-form" autocomplete="off" hidden>
+            <span class="money-input"><span aria-hidden="true">$</span><input id="my-value" type="number" min="1" step="1" placeholder="Mine" aria-label="My value for this player"></span>
+            <button type="submit" class="quiet">Set</button>
+            <button type="button" class="quiet" id="my-value-clear" hidden>Clear</button>
+          </form>
+        </div>
         <div><span class="b-label">Live</span><b class="b-live" id="b-live"></b></div>
       </div>
       <div class="b-bid">
@@ -152,7 +160,7 @@
           </table>
         </div>
         <p class="board-note">
-          <b>Value</b> is the pre-draft price. <b>Live</b> re-prices the players left using the money and spots left.
+          <b>Value</b> is the pre-draft price; click one to set your own (* marks yours), and the rest re-price around it. <b>Live</b> re-prices the players left using the money and spots left.
           <b>Bid to</b> is Live, adjusted up to ±20% for your roster’s category needs (switch this off in League setup), and capped at what you can afford. Category cells are z-scores against the players who get drafted: blue helps, red hurts.
           Type a nominated player in the search box, or click his row, to put him on the block.
         </p>

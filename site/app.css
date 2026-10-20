@@ -175,11 +175,26 @@ label.radio, label.check { flex-direction: row; align-items: center; gap: 8px; f
 .b-cats span small { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; opacity: 0.85; }
 .b-scarce { margin: 0; align-self: start; padding: 4px 10px; border: 2px solid var(--amber); color: var(--amber-hi); font-size: 14px; font-weight: 700; }
 .b-scarce[hidden] { display: none; }
+.b-flag { margin: 0; align-self: start; padding: 4px 10px; border-left: 3px solid var(--amber); color: var(--ink); font-size: 14px; max-width: 70ch; }
+.b-flag[hidden] { display: none; }
 .b-note { margin: 0; font-size: 14px; color: var(--ink-2); max-width: 70ch; }
 .b-prices { flex: 1 1 140px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
 .b-prices > div { display: flex; flex-direction: column; gap: 2px; }
 .b-prices b { font-size: 30px; font-weight: 700; line-height: 1; }
 .b-value { color: var(--ink-2); font-weight: 600 !important; }
+/* A value the user set themselves (ADR 0011) */
+.b-value.mine, td.val.mine { color: var(--amber-hi); }
+td.val.mine::after { content: '*'; margin-left: 1px; }
+td.val[data-edit] { cursor: text; }
+td.val[data-edit]:hover, td.val[data-edit]:focus-visible { outline: 1px dashed var(--ink-3); outline-offset: -3px; }
+td.val[data-edit] input { width: 4.5em; height: 28px; padding: 0 4px; border: 2px solid var(--amber); background: var(--deep); text-align: right; -moz-appearance: textfield; }
+td.val[data-edit] input::-webkit-inner-spin-button { display: none; }
+.my-value { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-width: 180px; }
+.my-value[hidden] { display: none; }
+.my-value .money-input { flex: 1 1 100%; height: 36px; }
+.my-value .money-input input { width: 100%; min-width: 0; border: 0; background: transparent; padding: 0 8px; -moz-appearance: textfield; }
+.my-value .money-input input::-webkit-inner-spin-button { display: none; }
+.my-value button { flex: 1 1 0; min-height: 32px; padding: 0 8px; font-size: 12px; }
 .b-bid { flex: 1 1 200px; display: flex; flex-direction: column; justify-content: center; gap: 4px; background: var(--home-hot) !important; }
 .b-bid .b-label { color: var(--amber); font-weight: 700; }
 .b-bid b { font-size: clamp(72px, 7vw, 104px); font-weight: 700; line-height: 0.95; letter-spacing: -0.02em; color: var(--amber); }
