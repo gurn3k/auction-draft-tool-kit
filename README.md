@@ -50,7 +50,9 @@ I recorded each decision as an ADR while I built, including the ones that revers
 
 ## What's next
 
-- Yahoo sync, once the Fantasy API access request is approved.
+- Live Yahoo sync: applied to Yahoo for Fantasy API access, awaiting approval.
+- Chrome extension: the Chrome Web Store developer application follows Yahoo's approval.
+- These go in that order so the product is fully compliant at each step.
 - Positional scarcity, once real Yahoo position eligibility is available.
 - Punt builds. The engine already takes any category list.
 
