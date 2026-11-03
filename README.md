@@ -1,4 +1,5 @@
 # Cap Drafter
+[![Tests](https://github.com/gurn3k/auction-draft-tool-kit/actions/workflows/tests.yml/badge.svg)](https://github.com/gurn3k/auction-draft-tool-kit/actions/workflows/tests.yml)
 
 Live auction prices for Yahoo fantasy basketball salary cap drafts.
 
