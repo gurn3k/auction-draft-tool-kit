@@ -82,4 +82,4 @@ docs/adr/        decision records
 
 Player data: [balldontlie](https://www.balldontlie.io/), 2025-26 regular season and 2026-27 rosters, as of 2026-10-19.
 
-© 2026 Gurnek Khaira. Built by [gurn3k](https://www.gurn3k.com).
+© 2026 Gurnek Khaira. The code is under the [MIT License](LICENSE). The player data comes from balldontlie, stays under [its terms](https://www.balldontlie.io/), and is not covered by that license. Built by [gurn3k](https://www.gurn3k.com).
