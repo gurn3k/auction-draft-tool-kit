@@ -834,7 +834,8 @@ function renderSold() {
   strip.replaceChildren(el('span', { class: 'b-label' }, 'Sold'),
     ...[...picks].reverse().slice(0, SHOWN).map((pk) => el('span', {}, `${pk.name ?? pk.playerId} `, el('b', {}, money(pk.price)),
       el('span', { class: 'to' }, ` ${state.draft.teams[pk.team]?.name ?? '?'}`))),
-    more > 0 ? el('button', { type: 'button', class: 'more', onclick: () => { selectTab('picks'); save(); $('tab-picks').focus(); } }, `+${more} more in Picks`) : null);
+    // replaceChildren() prints null as the text "null", so the button is left out instead.
+    ...(more > 0 ? [el('button', { type: 'button', class: 'more', onclick: () => { selectTab('picks'); save(); $('tab-picks').focus(); } }, `+${more} more in Picks`)] : []));
 }
 
 function renderOptions({ byId, teams }) {
