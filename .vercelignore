@@ -4,3 +4,6 @@ test
 scripts
 docs
 *.md
+data
+.github
+LICENSE
