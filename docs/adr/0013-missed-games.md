@@ -21,6 +21,8 @@ balldontlie gives games played per season, not why a game was missed. A strict "
 
 27 priced players are discounted, including Lauri Markkanen ($37 to $34), Anthony Davis ($33 to $30), Joel Embiid ($30 to $27), LaMelo Ball and Ja Morant. Healthy stars gain a little: Jokić $74 to $76.
 
+Rechecked 2026-11-13, with today's 15-game minimum and whole-dollar prices: 24 priced players are discounted. Markkanen, Davis and Embiid move as above, LaMelo Ball goes from $19 to $18, Ja Morant drops out of the 156 priced, and Jokić goes from $74 to $75.
+
 ## Consequences
 
 - Suspensions count as missed games (Ja Morant's 2023-24), and so does a season cut short by a trade with time off. The card lists the seasons, so a user can judge.
