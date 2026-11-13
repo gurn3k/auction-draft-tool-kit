@@ -283,3 +283,56 @@ test('rookies with no estimate never set replacement level, so the others are st
   assert.equal(prices.get('r1'), 1);
   assert.equal(sum([...prices.values()]), 30);
 });
+
+test('My values that no longer fit the money are scaled down to fit, so prices still add up (ADR 0011)', () => {
+  const base = valuePlayers(data.players, YAHOO_DEFAULTS, { rookieHistory: history });
+  // Legal at $200: ten players at $150 leaves $1 for each of the other 146 spots.
+  const myValues = Object.fromEntries(base.slice(0, 10).map((p) => [p.id, 150]));
+  const lower = { ...YAHOO_DEFAULTS, budget: 100 };
+  const v = valuePlayers(data.players, lower, { rookieHistory: history, myValues });
+  assert.equal(sum(v.map((p) => p.value)), 1200);
+  assert.ok(whole(v.map((p) => p.value)));
+  const mine = v.filter((p) => p.mine);
+  assert.equal(mine.length, 10);
+  assert.ok(mine.every((p) => p.value >= 1 && p.value < 150));
+  assert.ok(Math.max(...mine.map((p) => p.value)) - Math.min(...mine.map((p) => p.value)) <= 1, 'equal values stay within $1 of each other');
+  assert.equal(v.filter((p) => p.value > 0).length, 156);
+  // Live: the room spends so much on others that the values can't all be paid.
+  const at200 = valuePlayers(data.players, YAHOO_DEFAULTS, { rookieHistory: history, myValues: Object.fromEntries(base.slice(0, 10).map((p) => [p.id, 200])) });
+  const picks = at200.filter((p) => !p.mine).slice(0, 60).map((p, i) => ({ playerId: p.id, price: 6, team: i % 12 }));
+  const live = livePrices(at200, picks, YAHOO_DEFAULTS);
+  assert.equal(sum([...live.prices.values()]), live.moneyLeft);
+  assert.ok([...live.prices.values()].every((x) => x >= 1));
+});
+
+test('random leagues with My values set: live prices add up to the money left after random picks', () => {
+  const r = random(11);
+  for (let run = 0; run < 150; run++) {
+    const rosterSize = r.int(1, 25);
+    const league = { teams: r.int(2, 20), rosterSize, budget: r.int(rosterSize, 400), minGames: r.int(0, 82) };
+    const rookieHistory = r.rnd() < 0.7 ? history : null;
+    const plain = valuePlayers(data.players, league, { rookieHistory });
+    const myValues = randomMyValues(plain, league, r);
+    const v = valuePlayers(data.players, league, { rookieHistory, myValues });
+    const picks = randomPicks(v, league, r, r.int(0, league.teams * league.rosterSize));
+    const live = livePrices(v, picks, league);
+    const prices = [...live.prices.values()];
+    const label = JSON.stringify({ run, league, myValues, picks: picks.length });
+    assert.ok(whole(prices), label);
+    if (live.slotsLeft > 0 && prices.length) {
+      assert.equal(sum(prices), live.moneyLeft, label);
+      assert.ok(prices.every((x) => x >= 1), label);
+    }
+  }
+});
+
+test('when every open spot is a player the user priced, the money left is shared among them', () => {
+  const league = { teams: 2, budget: 20, rosterSize: 2, minGames: 0 };
+  const v = valuePlayers([make('a', { pts: 30 }), make('b', { pts: 20 }), make('c'), make('d'), make('e')], league, { myValues: { c: 3, d: 2 } });
+  // Two spots left, both players the user priced at $3 and $2, with $28 left.
+  const picks = [{ playerId: 'a', price: 6, team: 0 }, { playerId: 'b', price: 6, team: 1 }];
+  const live = livePrices(v, picks, league);
+  assert.equal(live.slotsLeft, 2);
+  assert.equal(sum([...live.prices.values()]), 28);
+  assert.ok(live.prices.get('c') > live.prices.get('d'));
+});

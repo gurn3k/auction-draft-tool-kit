@@ -279,7 +279,7 @@ function editValueCell(target) {
   if (!td) return;
   const p = getValued().find((x) => x.id === id);
   if (!p) return;
-  const start = p.mine || p.value >= 0.5 ? String(Math.round(p.value)) : '';
+  const start = p.mine ? String(state.myValues[id]) : p.value >= 0.5 ? String(Math.round(p.value)) : '';
   const input = el('input', { type: 'number', min: 1, step: 1, value: start, 'aria-label': `My value for ${p.name}` });
   td.replaceChildren(input);
   input.focus();
@@ -787,6 +787,10 @@ function renderBlock({ board, live, me, teams, fit }) {
     ].join('');
   }
   if (p.missesGames) note += ` Value cut ${DURABILITY.discount * 100}% for missed games: ${missedText(p)}.`;
+  // A value the user set can be scaled to fit the money (ADR 0011): say so, with both figures.
+  const typed = p.mine ? state.myValues[p.id] : null;
+  if (typed && p.value !== typed) note += ` Your ${money(typed)} is scaled to ${money(p.value)}, so your values and $1 for every other spot fit this league's money.`;
+  else if (typed && lv >= 0.5 && lv !== typed) note += ` Live is off your ${money(typed)} because the money left has to cover every open spot.`;
   $('b-note').textContent = note;
   // A hand-kept note (ADR 0010): context on the data, never a change to the price.
   $('b-flag').hidden = !p.note;
@@ -804,7 +808,7 @@ function renderBlock({ board, live, me, teams, fit }) {
   $('b-value').classList.toggle('mine', !!p.mine);
   $('b-value-label').textContent = p.mine ? 'My value' : 'Pre-draft';
   $('my-value-form').hidden = !(p.z || p.rookie);
-  if (document.activeElement !== $('my-value')) $('my-value').value = p.mine ? Math.round(p.value) : '';
+  if (document.activeElement !== $('my-value')) $('my-value').value = p.mine ? state.myValues[p.id] : '';
   $('my-value-clear').hidden = !p.mine;
   $('b-live').textContent = lv >= 0.5 ? money(lv) : '—';
   $('b-bid').textContent = bid ? money(bid) : '—';

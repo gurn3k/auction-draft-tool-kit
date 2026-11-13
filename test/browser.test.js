@@ -85,3 +85,28 @@ test('the Sold strip lists recent sales and nothing else', { skip }, async () =>
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
+
+// A saved draft in the shape the app writes, for seeding a page.
+function savedDraft({ league = {}, picks = [], myValues = {}, teams } = {}) {
+  const l = { teams: 12, budget: 200, rosterSize: 13, minGames: 15, categories: null, ...league };
+  const names = teams ?? Array.from({ length: l.teams }, (_, i) => ({ name: i === 0 ? 'My team' : `Team ${i + 1}` }));
+  return JSON.stringify({ league: l, draft: { teams: names, myTeam: 0, picks }, source: 'bundled', csv: null, myValues, sort: { key: 'live', dir: -1 }, fit: true, showDrafted: false, tab: 'me', minGames15: true });
+}
+const columnTotal = (page, cls) => page.$$eval(`#players-body td.${cls}`, (xs) => xs.reduce((a, x) => a + (Number((x.firstChild?.textContent ?? '').replace(/[$,]/g, '')) || 0), 0));
+
+test('the Value column adds up to the league money, and My values that no longer fit are scaled and say so', { skip }, async () => {
+  let page = await open();
+  assert.equal(await columnTotal(page, 'val'), 2400);
+  assert.match(await logPick(page, 'Nikola Jokic', 80, 3), /for \$80/);
+  assert.equal(await columnTotal(page, 'live'), 2320);
+  // Ten values of $150, set in a $200 league, then the budget drops to $100.
+  const top = await page.$$eval('#players-body tr[data-id]', (xs) => xs.slice(0, 10).map((x) => x.dataset.id));
+  await page.context().close();
+  page = await open({ storage: savedDraft({ league: { budget: 100 }, myValues: Object.fromEntries(top.map((id) => [id, 150])) }) });
+  assert.equal(await columnTotal(page, 'val'), 1200);
+  await page.click(`#players-body tr[data-id="${top[0]}"] td.player`);
+  assert.match(await page.textContent('#b-note'), /Your \$150 is scaled to \$\d+, so your values and \$1 for every other spot fit/);
+  assert.equal(await page.inputValue('#my-value'), '150');
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});

@@ -99,12 +99,22 @@ export function allocate(ranked, slots, money) {
 
 // Players the user has priced themselves (ADR 0011) take that price first and
 // the rest share what's left, so the total still spends exactly the money.
+// The values were legal when set, but a lower budget, or a room that has spent
+// more than expected, can leave too little money for them and $1 for every other
+// open spot. Then they're scaled down together to fit, never under $1. And once
+// every open spot is one of them, the money left is all theirs to share. Either
+// way the prices still add up to the money.
 function allocateWithMine(ranked, slots, money, mine) {
   const pinned = ranked.filter((p) => mine.has(p.id)).slice(0, Math.max(0, slots));
-  if (!pinned.length) return allocate(ranked, slots, money);
-  const fixed = pinned.reduce((a, p) => a + mine.get(p.id), 0);
-  const prices = allocate(ranked.filter((p) => !mine.has(p.id)), slots - pinned.length, money - fixed);
-  for (const p of pinned) prices.set(p.id, mine.get(p.id));
+  const n = pinned.length;
+  const room = money - (slots - n);
+  if (!n || room < n) return allocate(ranked, slots, money);
+  const typed = pinned.map((p) => mine.get(p.id));
+  const fixed = typed.reduce((a, b) => a + b, 0);
+  const own = fixed <= room && n < slots ? typed
+    : wholeDollars(typed.map((x) => (fixed > n ? 1 + ((x - 1) * (room - n)) / (fixed - n) : room / n)), room);
+  const prices = allocate(ranked.filter((p) => !mine.has(p.id)), slots - pinned.length, money - own.reduce((a, b) => a + b, 0));
+  pinned.forEach((p, i) => prices.set(p.id, own[i]));
   return prices;
 }
 
