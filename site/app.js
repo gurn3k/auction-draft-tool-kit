@@ -841,10 +841,11 @@ function renderBlock({ board, live, me, teams, fit }) {
     ].join('');
   }
   if (p.missesGames) note += ` Value cut ${DURABILITY.discount * 100}% for missed games: ${missedText(p)}.`;
-  // A value the user set can be scaled to fit the money (ADR 0011): say so, with both figures.
+  // A value the user set can be moved to fit the money (ADR 0011): say so, with the figures.
   const typed = p.mine ? state.myValues[p.id] : null;
-  if (typed && p.value !== typed) note += ` Your ${money(typed)} is scaled to ${money(p.value)}, so your values and $1 for every other spot fit this league's money.`;
-  else if (typed && lv >= 0.5 && lv !== typed) note += ` Live is off your ${money(typed)} because the money left has to cover every open spot.`;
+  if (typed && !p.value) note += ` Your ${money(typed)} isn’t used: you’ve priced more players than this league has roster spots.`;
+  else if (typed && p.value !== typed) note += ` Your ${money(typed)} is ${p.value > typed ? 'raised' : 'lowered'} to ${money(p.value)} so the prices add up to the league’s money.`;
+  if (typed && p.value && lv >= 0.5 && lv !== p.value) note += ` Live is ${money(lv)}, not ${money(p.value)}, so live prices add up to the ${money(live.moneyLeft)} left.`;
   $('b-note').textContent = note;
   // A hand-kept note (ADR 0010): context on the data, never a change to the price.
   $('b-flag').hidden = !p.note;

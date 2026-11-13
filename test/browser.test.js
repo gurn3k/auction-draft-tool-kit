@@ -105,7 +105,7 @@ test('the Value column adds up to the league money, and My values that no longer
   page = await open({ storage: savedDraft({ league: { budget: 100 }, myValues: Object.fromEntries(top.map((id) => [id, 150])) }) });
   assert.equal(await columnTotal(page, 'val'), 1200);
   await page.click(`#players-body tr[data-id="${top[0]}"] td.player`);
-  assert.match(await page.textContent('#b-note'), /Your \$150 is scaled to \$\d+, so your values and \$1 for every other spot fit/);
+  assert.match(await page.textContent('#b-note'), /Your \$150 is lowered to \$\d+ so the prices add up to the league’s money\./);
   assert.equal(await page.inputValue('#my-value'), '150');
   assert.deepEqual(page.errors, []);
   await page.context().close();
@@ -309,6 +309,22 @@ test('the privacy page says what Reset draft really clears, and opens from the a
   assert.doesNotMatch(stays, /or pressing Reset draft, deletes them/);
   await page.setViewportSize({ width: 360, height: 800 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0);
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
+
+test('a My value that Live has to move says so plainly, up or down', { skip }, async () => {
+  // Two teams of one spot each. I priced the 3rd and 4th best players at $3 and $2;
+  // once one spot is gone, the last spot will be one of mine, and the money left is his.
+  let page = await open();
+  const ids = await page.$$eval('#players-body tr[data-id]', (xs) => xs.slice(0, 4).map((x) => x.dataset.id));
+  await page.context().close();
+  const storage = savedDraft({ league: { teams: 2, rosterSize: 1, budget: 20 }, teams: [{ name: 'My team' }, { name: 'Team 2' }], myValues: { [ids[2]]: 3, [ids[3]]: 2 }, picks: [{ playerId: ids[0], name: 'Top', price: 5, team: 1 }] });
+  page = await open({ storage });
+  assert.equal(await page.textContent('#t-money'), '$35');
+  await page.click(`#players-body tr[data-id="${ids[2]}"] td.player`);
+  assert.equal(await page.textContent('#b-live'), '$35');
+  assert.match(await page.textContent('#b-note'), /Your \$3 is raised to \$\d+ so the prices add up to the league’s money\. Live is \$35, not \$\d+, so live prices add up to the \$35 left\./);
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
