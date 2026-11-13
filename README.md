@@ -19,11 +19,11 @@ Cap Drafter prices every player for your league and re-prices the board after ev
 
 ## What it does
 
-- **Prices for your league.** Set the budget, teams, roster spots and categories. Each player gets a dollar value, and together the values spend exactly the league's money.
+- **Prices for your league.** Set the budget, teams, roster spots and categories. Each player gets a whole-dollar value, and together the values spend exactly the league's money.
 - **Live re-pricing.** Log a sale (player, price, team) and the money and spots left are shared out again over the players still available. The board shows the room's inflation as it happens.
 - **Bid to.** The most I should pay: the live price, adjusted toward the categories my roster is short in, and capped at what I can actually bid.
 - **Room awareness.** Every team's money left, open spots and max bid, so you can see who can still afford a player.
-- **Your own projections.** Upload a CSV to replace the bundled 2025-26 stats.
+- **Your own prices.** Type your own value for any player and the rest re-price around it, or upload a CSV to replace the bundled 2025-26 stats.
 
 ## How I approached it
 
@@ -45,9 +45,10 @@ I recorded each decision as an ADR while I built, including the ones that revers
 
 ## How I know the numbers are right
 
-- **The maths is tested.** 54 tests run with `npm test`. They check that values add up to exactly teams × budget, that live prices share out exactly the money left, that illegal picks are refused, and that CSV import and name matching work.
-- **The data is cross-checked.** Moving to licensed data changed no one's value. With Yahoo defaults: Nikola Jokić $71, Victor Wembanyama $66, Shai Gilgeous-Alexander $61, and 156 players priced at exactly $2,400.
+- **The maths is tested.** 90 tests run with `npm test`. They check that whole-dollar values add up to exactly teams × budget, and that live prices share out exactly the money left, across 350 random leagues with My values, rookies and random legal picks. They also check that illegal picks and unclear typed amounts are refused, and that CSV import and name matching work. 10 of them drive the page in headless Chromium when Playwright is installed, and are skipped when it isn't, as in CI.
+- **The data is cross-checked.** Moving to licensed data changed no one's value (checked on 2026-10-19). Today, with Yahoo defaults, rookie values and the missed-games discount: Nikola Jokić $75, Victor Wembanyama $70, Shai Gilgeous-Alexander $64, and 156 players priced at exactly $2,400. A test keeps these figures in line with the code.
 - **It has been used in a live draft run.** I ran it beside a Yahoo draft room on 2026-10-18.
+- **I tried to break it.** A review on 2026-11-13 found 18 problems, the worst a Value column that added up to $2,402 in a $2,400 league. All 18 are fixed, each with a test. Every finding, and what's still open: [docs/FINDINGS.md](docs/FINDINGS.md).
 
 ## What's next
 
@@ -73,10 +74,11 @@ Requires Node 22.9+. The app is static, with no build step and no dependencies.
 site/            static app (deploys as-is)
   lib/           pure engine, no DOM: valuation, draft, fit, csv, match, names
   app.js         UI
-  data/          players.json (bundled data), projections-template.csv
+  data/          players.json (bundled data), rookie-history.json, projections-template.csv
+  privacy.html   privacy page
 scripts/         fetch-stats.js + bdl.js (data build), serve.js (local preview)
 test/            node --test
-data/            display-names.json (hand-kept)
+data/            display-names.json, player-notes.json (hand-kept)
 docs/adr/        decision records
 ```
 

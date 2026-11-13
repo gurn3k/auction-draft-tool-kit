@@ -30,3 +30,4 @@ The only way to disagree with a price was to upload a projections CSV for the wh
 
 - Nothing is sent anywhere, and the built-in prices are unchanged for everyone else.
 - A user who sets values far from the data skews their own Live prices for other players. That's intended: it's their money to reallocate.
+- Added 2026-11-13: values that were legal when set can stop fitting. A lower budget, or a room that spends more than expected, can leave too little for them plus $1 for every other open spot. Then they're scaled down together to fit, never under $1, and once every open spot is a player the user priced, the money left is shared among those players. The card says when a value has been scaled, with both figures. The cost: in those cases a user's value isn't kept exactly, but the prices still add up to the money.

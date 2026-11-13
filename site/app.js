@@ -1,10 +1,11 @@
 // Draft-room UI. All the maths lives in lib/; this file reads the forms, keeps
 // state in memory (and in localStorage as a convenience) and renders.
 import { CATEGORIES, DURABILITY, YAHOO_DEFAULTS, livePrices, myValueRoom, rosterSpots, shortSeasons, valuePlayers } from './lib/valuation.js';
-import { SCARCE_LEFT, addPick, bidCeiling, categorySupply, categoryTotals, checkPick, newDraft, removePick, scarceStrengths, teamSummaries } from './lib/draft.js';
+import { LEAGUE_LIMITS, SCARCE_LEFT, addPick, bidCeiling, categorySupply, categoryTotals, checkPick, leagueProblem, newDraft, parseDollars, removePick, scarceStrengths, teamSummaries, usableSave, wholeNumber } from './lib/draft.js';
 import { projectionsFromCsv } from './lib/csv.js';
 import { fitDrivers, fitFactor, fitStrength, needWeights, worthToYou } from './lib/fit.js';
 import { findPlayer } from './lib/match.js';
+import { customId } from './lib/names.js';
 
 const STORE = 'cap-drafter:v1';
 const $ = (id) => document.getElementById(id);
@@ -25,7 +26,6 @@ const money = (n) => `$${Math.round(n).toLocaleString('en-US')}`;
 const pct = (n) => `${n >= 0 ? '+' : '−'}${Math.abs(n * 100).toFixed(1)}%`;
 const fmtZ = (z) => (Math.abs(z) < 0.05 ? '0.0' : `${z > 0 ? '' : '−'}${Math.abs(z).toFixed(1)}`);
 const zClass = (z) => (z >= 1.5 ? 'g3' : z >= 0.75 ? 'g2' : z >= 0.25 ? 'g1' : z <= -1.5 ? 'b3' : z <= -0.75 ? 'b2' : z <= -0.25 ? 'b1' : '');
-const slug = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const fold = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 const state = {
@@ -57,22 +57,40 @@ function save() {
 // overwrites the other's picks with a stale copy.
 window.addEventListener('storage', (e) => {
   if (e.key !== STORE || !e.newValue) return;
-  load();
+  if (!load()) logMsg(UNREADABLE_MSG, 'error');
   fillSetup();
   render();
 });
+// A save that doesn't describe a usable draft (damaged, or edited by hand) used
+// to stop every render, leaving an empty board on every reload. Now it's copied
+// aside, the app starts fresh, and says so. Returns false for a damaged save.
+const UNREADABLE = `${STORE}:unreadable`;
 function load() {
+  let text;
   try {
-    const saved = JSON.parse(localStorage.getItem(STORE) || 'null');
-    if (!saved?.league || !saved?.draft) return;
-    Object.assign(state, saved);
-    if (state.source === 'csv' && !state.csv) state.source = 'bundled';
-    if (!state.myValues || typeof state.myValues !== 'object') state.myValues = {};
-    // The default minimum games went from 20 to 15 (ADR 0002). A save still on
-    // the old default moves once; a minimum the user set themselves is kept.
-    if (!saved.minGames15 && state.league.minGames === 20) state.league.minGames = YAHOO_DEFAULTS.minGames;
-  } catch { /* ignore a corrupt or unreadable save */ }
+    text = localStorage.getItem(STORE);
+  } catch { return true; /* storage blocked: work in memory */ }
+  if (!text) return true;
+  let saved;
+  try { saved = JSON.parse(text); } catch { saved = undefined; }
+  if (!usableSave(saved, CATEGORIES.map((c) => c.key))) {
+    try { localStorage.setItem(UNREADABLE, text); } catch { /* nowhere to keep it */ }
+    return false;
+  }
+  const { league, draft, source, csv, myValues, sort, fit, showDrafted, tab } = saved;
+  Object.assign(state, { league, draft, csv: csv ?? null, myValues: myValues ?? {} });
+  // Display preferences fall back to the defaults when they aren't readable.
+  state.source = source === 'csv' && state.csv ? 'csv' : 'bundled';
+  if (typeof sort?.key === 'string' && (sort.dir === 1 || sort.dir === -1)) state.sort = sort;
+  if (typeof fit === 'boolean') state.fit = fit;
+  if (typeof showDrafted === 'boolean') state.showDrafted = showDrafted;
+  if (['me', 'teams', 'picks'].includes(tab)) state.tab = tab;
+  // The default minimum games went from 20 to 15 (ADR 0002). A save still on
+  // the old default moves once; a minimum the user set themselves is kept.
+  if (!saved.minGames15 && state.league.minGames === 20) state.league.minGames = YAHOO_DEFAULTS.minGames;
+  return true;
 }
+const UNREADABLE_MSG = 'The draft saved in this browser couldn’t be read, so this is a fresh one.';
 
 // ---------- derived data ----------
 const players = () => (state.source === 'csv' && state.csv ? state.csv.players : bundled.players);
@@ -131,6 +149,17 @@ function fillSetup() {
   $('csv-status').textContent = state.csv ? `Loaded ${state.csv.players.length} players from ${state.csv.name}.` : 'No file loaded. Columns: name, FGM/FGA (or FG%), FTM/FTA (or FT%), 3PM, PTS, REB, AST, STL, BLK, TO.';
   $('csv-status').classList.remove('error');
   renderMyValuesStatus();
+  showSetupProblem(null);
+}
+
+// A setting that can't be used is refused out loud, under the form, and the
+// field keeps what was typed until it's fixed. The league keeps its last good settings.
+function showSetupProblem(problem) {
+  $('setup-msg').textContent = problem?.message ?? '';
+  for (const k of Object.keys(LEAGUE_LIMITS)) {
+    if (problem?.field === k) form.elements[k].setAttribute('aria-invalid', 'true');
+    else form.elements[k].removeAttribute('aria-invalid');
+  }
 }
 
 function renderMyValuesStatus() {
@@ -146,17 +175,26 @@ function setupSummary() {
 }
 
 function readLeague() {
-  const n = (k) => Math.round(Number(form.elements[k].value));
-  return { teams: n('teams'), budget: n('budget'), rosterSize: n('rosterSize'), minGames: n('minGames'), categories: state.league.categories };
+  // Whole numbers only: a blank box, "12.5" or "1e1" is refused, not rounded or guessed.
+  const n = (k) => wholeNumber(form.elements[k].value);
+  // The budget is typed money, read like a price: "1,000" yes, "1.000" asks which.
+  const budget = parseDollars(form.elements.budget.value);
+  return {
+    next: { teams: n('teams'), budget: budget.value ?? NaN, rosterSize: n('rosterSize'), minGames: n('minGames'), categories: state.league.categories },
+    budgetError: budget.error,
+  };
 }
 
-function onLeagueChange() {
-  const next = readLeague();
-  const ok = next.teams >= 2 && next.teams <= 20 && next.budget >= 1 && next.rosterSize >= 1 && next.rosterSize <= 25 && next.minGames >= 0;
+// `quiet` is for the pause while typing: a good value is applied, but a half-typed
+// one isn't flagged until the box is left or Enter is pressed.
+function onLeagueChange({ quiet = false } = {}) {
+  const { next, budgetError } = readLeague();
+  const shapeChanged = next.teams !== state.league.teams || next.rosterSize !== state.league.rosterSize;
+  const problem = budgetError ? { field: 'budget', message: `Budget per team: ${budgetError}` } : leagueProblem(next, shapeChanged ? null : state.draft);
+  if (!quiet || !problem) showSetupProblem(problem);
   // A number input also fires "change" on blur. Re-rendering then would swap the
   // table out from under the click that caused the blur, so do nothing if unchanged.
-  if (!ok || JSON.stringify(next) === JSON.stringify(state.league)) return;
-  const shapeChanged = next.teams !== state.league.teams || next.rosterSize !== state.league.rosterSize;
+  if (problem || JSON.stringify(next) === JSON.stringify(state.league)) return;
   if (shapeChanged && state.draft.picks.length) {
     if (!confirm('Changing teams or roster spots starts the draft over. Clear the picks logged so far?')) {
       fillSetup();
@@ -176,6 +214,7 @@ function onLeagueChange() {
   render();
 }
 
+const LAST_CATEGORY = 'Values need at least one category, so the last one stays ticked.';
 form.addEventListener('change', (e) => {
   const name = e.target.name;
   if (name === 'myTeam') {
@@ -191,7 +230,12 @@ form.addEventListener('change', (e) => {
     render();
   } else if (name === 'cat') {
     const picked = [...form.querySelectorAll('input[name="cat"]:checked')].map((x) => x.value);
-    if (!picked.length) { e.target.checked = true; return; } // values need at least one category
+    // Values need at least one category, so the last one stays ticked, and says why.
+    if (!picked.length) {
+      e.target.checked = true;
+      return showSetupProblem({ message: LAST_CATEGORY });
+    }
+    if ($('setup-msg').textContent === LAST_CATEGORY) showSetupProblem(null); // leave other fields' problems up
     // All 9 is the default; store null so it reads as "standard 9-cat".
     state.league = { ...state.league, categories: picked.length === CATEGORIES.length ? null : picked };
     render();
@@ -214,7 +258,7 @@ let typing;
 form.addEventListener('input', (e) => {
   if (!['budget', 'minGames'].includes(e.target.name)) return;
   clearTimeout(typing);
-  typing = setTimeout(onLeagueChange, 700);
+  typing = setTimeout(() => onLeagueChange({ quiet: true }), 700);
 });
 
 $('yahoo-defaults').addEventListener('click', () => {
@@ -252,6 +296,12 @@ function setMyValue(id, n) {
   logMsg(`Set your value for ${getValued().find((p) => p.id === id)?.name ?? 'him'} to ${money(n)}. Other prices were re-shared around it.`);
   return true;
 }
+// A value typed on the board or the card: read as whole dollars, or refused with the reason.
+function setTypedValue(id, text) {
+  const typed = parseDollars(text);
+  if (typed.error) return logMsg(`My value: ${typed.error}`, 'error'), false;
+  return setMyValue(id, typed.value);
+}
 function clearMyValue(id) {
   const { [id]: _, ...rest } = state.myValues;
   state.myValues = rest;
@@ -262,7 +312,7 @@ function clearMyValue(id) {
 }
 $('my-value-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  setMyValue(state.selected, Number($('my-value').value));
+  setTypedValue(state.selected, $('my-value').value);
 });
 $('my-value-clear').addEventListener('click', () => clearMyValue(state.selected));
 
@@ -279,8 +329,9 @@ function editValueCell(target) {
   if (!td) return;
   const p = getValued().find((x) => x.id === id);
   if (!p) return;
-  const start = p.mine || p.value >= 0.5 ? String(Math.round(p.value)) : '';
-  const input = el('input', { type: 'number', min: 1, step: 1, value: start, 'aria-label': `My value for ${p.name}` });
+  const start = p.mine ? String(state.myValues[id]) : p.value >= 0.5 ? String(Math.round(p.value)) : '';
+  // A text box, not a number box: the browser's number box drops a comma, so "1,5" became $15.
+  const input = el('input', { inputmode: 'numeric', autocomplete: 'off', value: start, 'aria-label': `My value for ${p.name}` });
   td.replaceChildren(input);
   input.focus();
   input.select();
@@ -294,7 +345,7 @@ function editValueCell(target) {
     const text = input.value.trim();
     if (text === start) render(); // unchanged: never pins a player just for visiting him
     else if (!text) (p.mine ? clearMyValue(id) : render());
-    else if (!setMyValue(id, Number(text))) {
+    else if (!setTypedValue(id, text)) {
       // Refused (the reason is shown): stay on him to fix it, unless he clicked away.
       render();
       if (move && valueCell(id)) editValueCell(valueCell(id));
@@ -381,14 +432,15 @@ function resolvePlayer(text, byId) {
     unknownPending = t;
     return { error: `“${t}” isn’t in the player data. Check the spelling, or press Enter again to log him by name (for a rookie).` };
   }
-  return { playerId: `custom-${slug(t)}`, name: t, custom: true };
+  return { playerId: customId(t), name: t, custom: true };
 }
 
 $('log-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const { byId } = derive();
   const who = resolvePlayer($('log-player').value, byId);
-  const price = Number($('log-price').value);
+  const typedPrice = parseDollars($('log-price').value);
+  const price = typedPrice.value;
   const team = Number($('log-team').value);
   if (state.draft.picks.length >= state.league.teams * state.league.rosterSize) return logMsg('The draft is over: every roster is full.', 'error');
   if (who.error) return logMsg(who.error, 'error');
@@ -400,6 +452,7 @@ $('log-form').addEventListener('submit', (e) => {
     return logMsg('Which player? ', 'error', ...who.suggest.flatMap((p, i) => [i ? ' ' : '',
       el('button', { type: 'button', class: 'suggest', onclick: () => pickSuggestion(p) }, optionLabel(p))]));
   }
+  if (typedPrice.error) return logMsg(`Price: ${typedPrice.error}`, 'error');
   unknownPending = '';
   const pick = { playerId: who.playerId, name: who.name, price, team };
   const error = checkPick(state.draft, state.league, pick);
@@ -528,7 +581,8 @@ function renderBoard({ v, board, live, me, fit, repriced }) {
       return { p, live: lv, bid: drafted.has(p.id) || lv < 0.5 ? 0 : bidCeiling(fit.worth(p), me), pick: drafted.get(p.id) };
     });
   let { key, dir } = state.sort;
-  if (key.startsWith('z.') && !cats().some((c) => `z.${c.key}` === key)) ({ key, dir } = state.sort = { key: 'live', dir: -1 });
+  // A sort on a column that isn't shown (a category no longer scored, say) goes back to Live.
+  if (!columns().some((c) => c.key === key)) ({ key, dir } = state.sort = { key: 'live', dir: -1 });
   rows.sort((a, b) => {
     const x = sortValue(a, key), y = sortValue(b, key);
     return (x < y ? -1 : x > y ? 1 : 0) * dir || (a.p.rank ?? 1e9) - (b.p.rank ?? 1e9) || fold(a.p.name).localeCompare(fold(b.p.name));
@@ -787,6 +841,11 @@ function renderBlock({ board, live, me, teams, fit }) {
     ].join('');
   }
   if (p.missesGames) note += ` Value cut ${DURABILITY.discount * 100}% for missed games: ${missedText(p)}.`;
+  // A value the user set can be moved to fit the money (ADR 0011): say so, with the figures.
+  const typed = p.mine ? state.myValues[p.id] : null;
+  if (typed && !p.value) note += ` Your ${money(typed)} isn’t used: you’ve priced more players than this league has roster spots.`;
+  else if (typed && p.value !== typed) note += ` Your ${money(typed)} is ${p.value > typed ? 'raised' : 'lowered'} to ${money(p.value)} so the prices add up to the league’s money.`;
+  if (typed && p.value && lv >= 0.5 && lv !== p.value) note += ` Live is ${money(lv)}, not ${money(p.value)}, so live prices add up to the ${money(live.moneyLeft)} left.`;
   $('b-note').textContent = note;
   // A hand-kept note (ADR 0010): context on the data, never a change to the price.
   $('b-flag').hidden = !p.note;
@@ -804,7 +863,7 @@ function renderBlock({ board, live, me, teams, fit }) {
   $('b-value').classList.toggle('mine', !!p.mine);
   $('b-value-label').textContent = p.mine ? 'My value' : 'Pre-draft';
   $('my-value-form').hidden = !(p.z || p.rookie);
-  if (document.activeElement !== $('my-value')) $('my-value').value = p.mine ? Math.round(p.value) : '';
+  if (document.activeElement !== $('my-value')) $('my-value').value = p.mine ? state.myValues[p.id] : '';
   $('my-value-clear').hidden = !p.mine;
   $('b-live').textContent = lv >= 0.5 ? money(lv) : '—';
   $('b-bid').textContent = bid ? money(bid) : '—';
@@ -834,7 +893,8 @@ function renderSold() {
   strip.replaceChildren(el('span', { class: 'b-label' }, 'Sold'),
     ...[...picks].reverse().slice(0, SHOWN).map((pk) => el('span', {}, `${pk.name ?? pk.playerId} `, el('b', {}, money(pk.price)),
       el('span', { class: 'to' }, ` ${state.draft.teams[pk.team]?.name ?? '?'}`))),
-    more > 0 ? el('button', { type: 'button', class: 'more', onclick: () => { selectTab('picks'); save(); $('tab-picks').focus(); } }, `+${more} more in Picks`) : null);
+    // replaceChildren() prints null as the text "null", so the button is left out instead.
+    ...(more > 0 ? [el('button', { type: 'button', class: 'more', onclick: () => { selectTab('picks'); save(); $('tab-picks').focus(); } }, `+${more} more in Picks`)] : []));
 }
 
 function renderOptions({ byId, teams }) {
@@ -907,7 +967,7 @@ $('search').addEventListener('keydown', (e) => {
 $('show-drafted').addEventListener('change', (e) => { state.showDrafted = e.target.checked; render(); });
 
 // ---------- boot ----------
-load();
+if (!load()) logMsg(UNREADABLE_MSG, 'error');
 try {
   bundled = await (await fetch('data/players.json')).json();
   // Optional: without it, rookies are simply listed unpriced, as before.

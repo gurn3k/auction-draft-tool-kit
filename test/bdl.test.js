@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { aliasesFor, buildPlayers, buildRookieHistory } from '../scripts/bdl.js';
 import { YAHOO_DEFAULTS, valuePlayers } from '../site/lib/valuation.js';
 
@@ -85,4 +89,47 @@ test('recent seasons list games and minutes for the seasons a player appeared in
   const row = (id, gp, min) => ({ player: player(id, 'A', 'B'), stats: { ...stats, gp, min } });
   const [p] = buildPlayers([row(1, 70, 34)], [], { recent: { 2024: [row(1, 40, 31)], 2025: [row(1, 70, 34)] } });
   assert.deepEqual(p.seasons, [[2024, 40, 31], [2025, 70, 34]]);
+});
+
+test('a cached rebuild with a past season missing stops, rather than quietly shrinking the rookie history', () => {
+  // A scratch folder with this season saved but no past seasons, and no API key,
+  // so nothing can be fetched. The data files must be left as they were.
+  const dir = mkdtempSync(join(tmpdir(), 'cap-drafter-'));
+  try {
+    const raw = join(dir, '.scratch/raw/bdl');
+    mkdirSync(raw, { recursive: true });
+    mkdirSync(join(dir, 'site/data'), { recursive: true });
+    mkdirSync(join(dir, 'data'), { recursive: true });
+    writeFileSync(join(raw, 'season-averages-2025-regular.json'), JSON.stringify([{ player: player(1, 'A', 'B'), stats }]));
+    writeFileSync(join(raw, 'active-players.json'), JSON.stringify([]));
+    writeFileSync(join(dir, 'site/data/players.json'), '{"kept":true}');
+    writeFileSync(join(dir, 'site/data/rookie-history.json'), '{"kept":true}');
+    writeFileSync(join(dir, 'data/display-names.json'), '{"names":{}}');
+    writeFileSync(join(dir, 'data/player-notes.json'), '{"notes":{}}');
+    const script = fileURLToPath(new URL('../scripts/fetch-stats.js', import.meta.url));
+    const env = { ...process.env };
+    delete env.BALLDONTLIE_API_KEY;
+    const run = spawnSync(process.execPath, [script, '--cached'], { cwd: dir, env, encoding: 'utf8' });
+    assert.notEqual(run.status, 0);
+    assert.match(run.stderr, /season-averages-2017-regular\.json/);
+    assert.equal(readFileSync(join(dir, 'site/data/rookie-history.json'), 'utf8'), '{"kept":true}');
+    assert.equal(readFileSync(join(dir, 'site/data/players.json'), 'utf8'), '{"kept":true}');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the README quotes the values the app shows with Yahoo defaults', () => {
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const claim = readme.match(/Nikola Jokić \$(\d+), Victor Wembanyama \$(\d+), Shai Gilgeous-Alexander \$(\d+), and (\d+) players priced at exactly \$([\d,]+)/);
+  assert.ok(claim, 'the README states the top three values and the total');
+  const data = JSON.parse(readFileSync(new URL('../site/data/players.json', import.meta.url), 'utf8'));
+  const rookieHistory = JSON.parse(readFileSync(new URL('../site/data/rookie-history.json', import.meta.url), 'utf8'));
+  // As the app values them: bundled stats with rookie estimates.
+  const v = valuePlayers(data.players, YAHOO_DEFAULTS, { rookieHistory });
+  const at = (name) => v.find((p) => p.name === name).value;
+  assert.deepEqual(claim.slice(1, 4).map(Number), [at('Nikola Jokic'), at('Victor Wembanyama'), at('Shai Gilgeous-Alexander')]);
+  const priced = v.filter((p) => p.value > 0);
+  assert.equal(Number(claim[4]), priced.length);
+  assert.equal(Number(claim[5].replace(/,/g, '')), priced.reduce((a, p) => a + p.value, 0));
 });

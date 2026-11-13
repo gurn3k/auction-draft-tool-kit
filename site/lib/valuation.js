@@ -62,31 +62,59 @@ function scorePool(players, pool, categories) {
   });
 }
 
+// Rounds shares to whole dollars without losing or inventing any: each share is
+// rounded down, then the dollars left over go to the largest fractions (ties to
+// the better-ranked player). Shares in rank order stay in rank order, and none
+// moves by more than $1.
+export function wholeDollars(shares, total) {
+  const out = shares.map(Math.floor);
+  let left = total - out.reduce((a, b) => a + b, 0);
+  const order = shares.map((_, i) => i).sort((a, b) => (shares[b] - out[b]) - (shares[a] - out[a]) || a - b);
+  for (let k = 0; left > 0 && k < order.length; k++, left--) out[order[k]]++;
+  return out;
+}
+
 // Spreads `money` across the best `slots` players by value over replacement.
 // Every rostered player costs at least $1, so only money beyond $1 a slot is
 // shared out. Replacement level is the best player who won't get rostered.
+// Bids are whole dollars, so prices are too, and they still add up to `money`.
 export function allocate(ranked, slots, money) {
   const prices = new Map();
   if (slots <= 0 || ranked.length === 0) return prices;
   const top = ranked.slice(0, slots);
-  const replacement = ranked[slots]?.total ?? top[top.length - 1].total;
+  // A rookie with no estimate sits at -Infinity; he never sets replacement level.
+  let replacement = ranked[slots]?.total ?? top[top.length - 1].total;
+  if (!Number.isFinite(replacement)) replacement = top.filter((p) => Number.isFinite(p.total)).at(-1)?.total ?? 0;
   const over = top.map((p) => Math.max(0, p.total - replacement));
   const sum = over.reduce((a, b) => a + b, 0);
-  const surplus = Math.max(0, money - top.length);
-  top.forEach((p, i) => {
-    prices.set(p.id, sum > 0 ? 1 + (over[i] / sum) * surplus : money / top.length);
-  });
+  const cash = Math.max(0, money);
+  // $1 a player, or an even share if there isn't $1 for each: never more money than there is.
+  const floor = Math.min(1, cash / top.length);
+  const surplus = cash - floor * top.length;
+  const shares = top.map((_, i) => (sum > 0 ? floor + (over[i] / sum) * surplus : cash / top.length));
+  const final = Number.isInteger(cash) ? wholeDollars(shares, cash) : shares;
+  top.forEach((p, i) => prices.set(p.id, final[i]));
   return prices;
 }
 
 // Players the user has priced themselves (ADR 0011) take that price first and
 // the rest share what's left, so the total still spends exactly the money.
+// The values were legal when set, but a lower budget, or a room that has spent
+// more than expected, can leave too little money for them and $1 for every other
+// open spot. Then they're scaled down together to fit, never under $1. And once
+// every open spot is one of them, the money left is all theirs to share. Either
+// way the prices still add up to the money.
 function allocateWithMine(ranked, slots, money, mine) {
   const pinned = ranked.filter((p) => mine.has(p.id)).slice(0, Math.max(0, slots));
-  if (!pinned.length) return allocate(ranked, slots, money);
-  const fixed = pinned.reduce((a, p) => a + mine.get(p.id), 0);
-  const prices = allocate(ranked.filter((p) => !mine.has(p.id)), slots - pinned.length, money - fixed);
-  for (const p of pinned) prices.set(p.id, mine.get(p.id));
+  const n = pinned.length;
+  const room = money - (slots - n);
+  if (!n || room < n) return allocate(ranked, slots, money);
+  const typed = pinned.map((p) => mine.get(p.id));
+  const fixed = typed.reduce((a, b) => a + b, 0);
+  const own = fixed <= room && n < slots ? typed
+    : wholeDollars(typed.map((x) => (fixed > n ? 1 + ((x - 1) * (room - n)) / (fixed - n) : room / n)), room);
+  const prices = allocate(ranked.filter((p) => !mine.has(p.id)), slots - pinned.length, money - own.reduce((a, b) => a + b, 0));
+  pinned.forEach((p, i) => prices.set(p.id, own[i]));
   return prices;
 }
 
@@ -128,7 +156,10 @@ export function rookieSlotEstimates(history, pool, categories, replacementTotal,
 // Pre-draft values. Returns every eligible player, best first, with per-category
 // z-scores, a total and a dollar value (0 for players outside the rostered pool).
 export function valuePlayers(players, league, { categories = CATEGORIES, myValues = {}, rookieHistory = null } = {}) {
-  const eligible = players.filter((p) => p.gp >= league.minGames);
+  // A player with no games has no per-game stats, only zeros, so even a 0-game
+  // minimum needs at least one game to value him.
+  const minGames = Math.max(1, league.minGames);
+  const eligible = players.filter((p) => p.gp >= minGames);
   const slots = rosterSpots(league);
   // The averages that z-scores compare against should describe the players who
   // actually get drafted, not the whole league, so re-centre on the top of the
@@ -146,10 +177,10 @@ export function valuePlayers(players, league, { categories = CATEGORIES, myValue
   // This year's rookies have no NBA stats. Each gets the average surplus of
   // past rookies from his draft slot (ADR 0012). Those it puts at $0, and
   // undrafted rookies, sit below everyone, still there to be priced by hand.
-  const rookies = players.filter((p) => p.rookie && p.gp < league.minGames).sort((a, b) => (a.pick ?? 99) - (b.pick ?? 99));
+  const rookies = players.filter((p) => p.rookie && !(p.gp >= minGames)).sort((a, b) => (a.pick ?? 99) - (b.pick ?? 99));
   if (rookieHistory?.players?.length && rookies.length) {
     const replacement = replacementTotal;
-    const slotsFor = rookieSlotEstimates(rookieHistory, pool, categories, replacement, league.minGames);
+    const slotsFor = rookieSlotEstimates(rookieHistory, pool, categories, replacement, minGames);
     const estimated = rookies.map((p) => {
       const est = p.pick ? slotsFor.find((s) => p.pick >= s.lo && p.pick <= s.hi) : null;
       return { ...p, total: est?.surplus > 0 ? replacement + est.surplus : -Infinity, ...(est ? { estimate: est } : {}) };

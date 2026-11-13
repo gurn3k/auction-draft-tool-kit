@@ -59,13 +59,17 @@ if (process.argv.includes('--cached')) {
 
 // Past seasons, for the rookie history. Each is saved once and never refetched:
 // a finished season's averages don't change. A missing one is fetched even with
-// --cached when a key is set, as it doesn't change this season's data.
+// --cached when a key is set, as it doesn't change this season's data. Without
+// a key it stops: going on would quietly shrink the rookie history and drop the
+// seasons the missed-games discount reads, and write both over the good files.
 const bySeason = { [SEASON]: averages };
 for (let season = HISTORY_FROM; season < SEASON; season++) {
   const file = `${RAW}/season-averages-${season}-regular.json`;
   const saved = await access(file).then(() => true, () => false);
   if (saved) bySeason[season] = JSON.parse(await readFile(file, 'utf8'));
-  else if (!process.argv.includes('--cached') || process.env.BALLDONTLIE_API_KEY) {
+  else if (!process.env.BALLDONTLIE_API_KEY) {
+    throw new Error(`${file} is missing. Set BALLDONTLIE_API_KEY (in .env.local) to fetch it; nothing was written.`);
+  } else {
     console.log(`Fetching ${season}-${String(season + 1).slice(2)} season averages…`);
     bySeason[season] = await all(`season_averages/general?season=${season}&season_type=regular&type=base`);
     await writeFile(file, JSON.stringify(bySeason[season]));

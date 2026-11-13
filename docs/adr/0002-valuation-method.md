@@ -12,8 +12,9 @@ Values use standard z-score valuation for head-to-head categories, then a value-
 4. **Total** = the sum of the 9 z-scores, with every category weighted equally.
 5. **Replacement level** = the total of the best player who won't be rostered (rank `teams × spots + 1`).
 6. **Dollars.** Every rostered player costs at least $1. The rest of the money (`teams × budget − rostered players`) is split in proportion to each player's total above replacement.
+7. **Whole dollars** (added 2026-11-13). Bids are whole dollars, so prices are too. Each share is rounded down, and the dollars left over go to the players with the largest fractions. Rounding each price on its own made the board's Value column add up to $2,402 in a $2,400 league. This way the figures a manager can add up come to exactly the league's money. No price moves by more than $1 from its exact share. The cost: two players with the same exact share, such as rookies from the same draft-slot range, can end up $1 apart.
 
-**Live prices** repeat steps 5 and 6 over the undrafted players only, using the money and spots left in the league. The z-scores don't change during a draft. Only the money and the competition for it do.
+**Live prices** repeat steps 5 to 7 over the undrafted players only, using the money and spots left in the league. The z-scores don't change during a draft. Only the money and the competition for it do.
 
 **Inflation** = money left ÷ (sum of the pre-draft values of the players who will fill the open spots) − 1.
 

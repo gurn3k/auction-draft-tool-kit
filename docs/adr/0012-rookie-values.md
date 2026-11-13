@@ -42,3 +42,5 @@ Values come from last season's stats, so this year's rookies had none and were l
 | 31–60 | $0 | 1% |
 
 Seven rookies are priced: picks 1–7. They take the place of seven veterans who were worth $1–2 (Stephon Castle, Maxime Raynaud and others). Because the best player left unrostered is now a little better, the method shares slightly more of the money to the top: Jokić goes from $71 to $74 and Wembanyama from $66 to $69. That's the same rule applied to a slightly different pool, not a change to the method.
+
+Rechecked 2026-11-13. The figures above were measured with a 20-game minimum, the default when this was written. With today's 15-game default and whole-dollar prices, picks 1–3 are still $6 and picks 4–7 $1, and the hit rates are 41%, 19%, 14%, 3% and 1%. Jokić goes from $72 to $75 when rookies are priced.
