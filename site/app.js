@@ -1,7 +1,7 @@
 // Draft-room UI. All the maths lives in lib/; this file reads the forms, keeps
 // state in memory (and in localStorage as a convenience) and renders.
 import { CATEGORIES, DURABILITY, YAHOO_DEFAULTS, livePrices, myValueRoom, rosterSpots, shortSeasons, valuePlayers } from './lib/valuation.js';
-import { LEAGUE_LIMITS, SCARCE_LEFT, addPick, bidCeiling, categorySupply, categoryTotals, checkPick, leagueProblem, newDraft, parseDollars, removePick, scarceStrengths, teamSummaries, wholeNumber } from './lib/draft.js';
+import { LEAGUE_LIMITS, SCARCE_LEFT, addPick, bidCeiling, categorySupply, categoryTotals, checkPick, leagueProblem, newDraft, parseDollars, removePick, scarceStrengths, teamSummaries, usableSave, wholeNumber } from './lib/draft.js';
 import { projectionsFromCsv } from './lib/csv.js';
 import { fitDrivers, fitFactor, fitStrength, needWeights, worthToYou } from './lib/fit.js';
 import { findPlayer } from './lib/match.js';
@@ -57,22 +57,40 @@ function save() {
 // overwrites the other's picks with a stale copy.
 window.addEventListener('storage', (e) => {
   if (e.key !== STORE || !e.newValue) return;
-  load();
+  if (!load()) logMsg(UNREADABLE_MSG, 'error');
   fillSetup();
   render();
 });
+// A save that doesn't describe a usable draft (damaged, or edited by hand) used
+// to stop every render, leaving an empty board on every reload. Now it's copied
+// aside, the app starts fresh, and says so. Returns false for a damaged save.
+const UNREADABLE = `${STORE}:unreadable`;
 function load() {
+  let text;
   try {
-    const saved = JSON.parse(localStorage.getItem(STORE) || 'null');
-    if (!saved?.league || !saved?.draft) return;
-    Object.assign(state, saved);
-    if (state.source === 'csv' && !state.csv) state.source = 'bundled';
-    if (!state.myValues || typeof state.myValues !== 'object') state.myValues = {};
-    // The default minimum games went from 20 to 15 (ADR 0002). A save still on
-    // the old default moves once; a minimum the user set themselves is kept.
-    if (!saved.minGames15 && state.league.minGames === 20) state.league.minGames = YAHOO_DEFAULTS.minGames;
-  } catch { /* ignore a corrupt or unreadable save */ }
+    text = localStorage.getItem(STORE);
+  } catch { return true; /* storage blocked: work in memory */ }
+  if (!text) return true;
+  let saved;
+  try { saved = JSON.parse(text); } catch { saved = undefined; }
+  if (!usableSave(saved, CATEGORIES.map((c) => c.key))) {
+    try { localStorage.setItem(UNREADABLE, text); } catch { /* nowhere to keep it */ }
+    return false;
+  }
+  const { league, draft, source, csv, myValues, sort, fit, showDrafted, tab } = saved;
+  Object.assign(state, { league, draft, csv: csv ?? null, myValues: myValues ?? {} });
+  // Display preferences fall back to the defaults when they aren't readable.
+  state.source = source === 'csv' && state.csv ? 'csv' : 'bundled';
+  if (typeof sort?.key === 'string' && (sort.dir === 1 || sort.dir === -1)) state.sort = sort;
+  if (typeof fit === 'boolean') state.fit = fit;
+  if (typeof showDrafted === 'boolean') state.showDrafted = showDrafted;
+  if (['me', 'teams', 'picks'].includes(tab)) state.tab = tab;
+  // The default minimum games went from 20 to 15 (ADR 0002). A save still on
+  // the old default moves once; a minimum the user set themselves is kept.
+  if (!saved.minGames15 && state.league.minGames === 20) state.league.minGames = YAHOO_DEFAULTS.minGames;
+  return true;
 }
+const UNREADABLE_MSG = 'The draft saved in this browser couldn’t be read, so this is a fresh one.';
 
 // ---------- derived data ----------
 const players = () => (state.source === 'csv' && state.csv ? state.csv.players : bundled.players);
@@ -557,7 +575,8 @@ function renderBoard({ v, board, live, me, fit, repriced }) {
       return { p, live: lv, bid: drafted.has(p.id) || lv < 0.5 ? 0 : bidCeiling(fit.worth(p), me), pick: drafted.get(p.id) };
     });
   let { key, dir } = state.sort;
-  if (key.startsWith('z.') && !cats().some((c) => `z.${c.key}` === key)) ({ key, dir } = state.sort = { key: 'live', dir: -1 });
+  // A sort on a column that isn't shown (a category no longer scored, say) goes back to Live.
+  if (!columns().some((c) => c.key === key)) ({ key, dir } = state.sort = { key: 'live', dir: -1 });
   rows.sort((a, b) => {
     const x = sortValue(a, key), y = sortValue(b, key);
     return (x < y ? -1 : x > y ? 1 : 0) * dir || (a.p.rank ?? 1e9) - (b.p.rank ?? 1e9) || fold(a.p.name).localeCompare(fold(b.p.name));
@@ -941,7 +960,7 @@ $('search').addEventListener('keydown', (e) => {
 $('show-drafted').addEventListener('change', (e) => { state.showDrafted = e.target.checked; render(); });
 
 // ---------- boot ----------
-load();
+if (!load()) logMsg(UNREADABLE_MSG, 'error');
 try {
   bundled = await (await fetch('data/players.json')).json();
   // Optional: without it, rookies are simply listed unpriced, as before.

@@ -138,3 +138,25 @@ export function scarceStrengths(player, supply, categories) {
     .map((c) => ({ key: c.key, label: c.label, left: supply[c.key] }))
     .sort((a, b) => a.left - b.left);
 }
+
+// Whether a draft saved in the browser can be used as it is. Only its shape is
+// checked, not League setup's limits, so a draft saved before those limits (a
+// $5,000 budget, say) still loads. A damaged or hand-edited save would stop
+// every render, so the app starts fresh instead.
+const STAT_KEYS = ['gp', 'fgm', 'fga', 'ftm', 'fta', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'tov'];
+export function usableSave(saved, categoryKeys) {
+  const { league, draft, myValues, csv } = saved ?? {};
+  const whole = (x, min) => Number.isInteger(x) && x >= min;
+  const plain = (o) => o != null && typeof o === 'object' && !Array.isArray(o);
+  if (!plain(league) || !plain(draft)) return false;
+  if (!whole(league.teams, 1) || !whole(league.rosterSize, 1) || !whole(league.budget, 1) || !whole(league.minGames, 0)) return false;
+  if (league.categories != null && !(Array.isArray(league.categories) && league.categories.length && league.categories.every((k) => categoryKeys.includes(k)))) return false;
+  const team = (i) => whole(i, 0) && i < league.teams;
+  if (!Array.isArray(draft.teams) || draft.teams.length !== league.teams || !draft.teams.every((t) => typeof t?.name === 'string')) return false;
+  if (!team(draft.myTeam) || !Array.isArray(draft.picks)) return false;
+  if (!draft.picks.every((p) => typeof p?.playerId === 'string' && whole(p.price, 1) && team(p.team) && (p.name == null || typeof p.name === 'string'))) return false;
+  if (myValues != null && !(plain(myValues) && Object.values(myValues).every((v) => whole(v, 1)))) return false;
+  if (csv != null && !(plain(csv) && typeof csv.name === 'string' && Array.isArray(csv.players)
+    && csv.players.every((p) => typeof p?.id === 'string' && typeof p.name === 'string' && STAT_KEYS.every((k) => Number.isFinite(p[k]))))) return false;
+  return true;
+}

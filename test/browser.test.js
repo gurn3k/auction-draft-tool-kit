@@ -206,3 +206,37 @@ test('two rookies logged by non-Latin names are two players, not one, and markup
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
+
+test('a damaged save starts a fresh draft and says so, instead of a blank page, and a sound one comes back', { skip }, async () => {
+  const teams2 = [{ name: 'Mine' }, { name: 'Theirs' }];
+  const damaged = [
+    '{not json',
+    '{"league":{"teams":12},"draft":{}}',
+    savedDraft({ teams: [{ name: 'A' }] }),
+    savedDraft({ league: { teams: 2 }, teams: teams2, picks: [{ playerId: 'x', price: 'lots', team: 9 }] }),
+    savedDraft({ myValues: { 'bdl-246': '50' } }),
+  ];
+  for (const storage of damaged) {
+    const page = await open({ storage });
+    assert.deepEqual(page.errors, [], storage);
+    assert.match(await page.textContent('#log-msg'), /saved in this browser couldn’t be read/, storage);
+    assert.match(await page.textContent('#setup-sum'), /\$200 budget · 12 teams · 13 spots/);
+    assert.ok((await page.$$('#players-body tr[data-id]')).length > 100);
+    assert.equal(await page.evaluate(() => localStorage.getItem('cap-drafter:v1:unreadable')), storage, 'the damaged copy is kept aside');
+    await page.context().close();
+  }
+  // Saved before League setup had limits (a $5,000 budget was accepted then): still usable.
+  let page = await open({ storage: savedDraft({ league: { teams: 2, budget: 5000 }, teams: teams2 }) });
+  assert.equal(await page.textContent('#log-msg'), '');
+  assert.match(await page.textContent('#setup-sum'), /\$5,000 budget · 2 teams/);
+  await page.context().close();
+  // A sound save comes back as it was, even with an unreadable display preference.
+  const good = JSON.parse(savedDraft({ league: { teams: 2, budget: 100 }, teams: teams2, picks: [{ playerId: 'bdl-246', name: 'Nikola Jokic', price: 40, team: 1 }] }));
+  page = await open({ storage: JSON.stringify({ ...good, tab: 'nowhere', sort: { key: 'constructor', dir: 1 } }) });
+  assert.equal(await page.textContent('#log-msg'), '');
+  assert.match(await page.textContent('#setup-sum'), /\$100 budget · 2 teams/);
+  assert.equal(await page.textContent('#t-money'), '$160');
+  assert.equal(await page.isVisible('#panel-me'), true);
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addPick, bidCeiling, categorySupply, categoryTotals, checkPick, leagueProblem, newDraft, parseDollars, removePick, scarceStrengths, teamSummaries, wholeNumber } from '../site/lib/draft.js';
+import { addPick, bidCeiling, categorySupply, categoryTotals, checkPick, leagueProblem, newDraft, parseDollars, removePick, scarceStrengths, teamSummaries, usableSave, wholeNumber } from '../site/lib/draft.js';
 
 const league = { teams: 3, budget: 20, rosterSize: 3, minGames: 0 };
 
@@ -134,4 +134,28 @@ test('typed dollar amounts are read as whole dollars or refused with the reason'
     assert.equal(r.value, undefined, text);
     assert.match(r.error, message, text);
   }
+});
+
+test('a saved draft is used only when its shape is sound, whatever the setup limits', () => {
+  const keys = ['fg', 'ft', 'pts'];
+  const good = { league: { teams: 2, budget: 100, rosterSize: 13, minGames: 15, categories: null }, draft: { teams: [{ name: 'A' }, { name: 'B' }], myTeam: 0, picks: [{ playerId: 'x', name: 'X', price: 40, team: 1 }] }, myValues: { y: 5 } };
+  assert.equal(usableSave(good, keys), true);
+  assert.equal(usableSave({ ...good, league: { ...good.league, budget: 5000 } }, keys), true, 'saved before the $2,000 limit');
+  const with_ = (path, value) => {
+    const s = structuredClone(good);
+    const keysOf = path.split('.');
+    let o = s;
+    for (const k of keysOf.slice(0, -1)) o = o[k];
+    o[keysOf.at(-1)] = value;
+    return s;
+  };
+  const damaged = [
+    null, 'text', {}, { league: { teams: 12 }, draft: {} },
+    with_('league.teams', '2'), with_('league.budget', 0), with_('league.minGames', -1), with_('league.categories', ['nope']), with_('league.categories', []),
+    with_('draft.teams', [{ name: 'A' }]), with_('draft.teams', [{ name: 'A' }, {}]), with_('draft.myTeam', 5), with_('draft.picks', {}),
+    with_('draft.picks', [{ playerId: 'x', price: 'lots', team: 1 }]), with_('draft.picks', [{ playerId: 'x', price: 4, team: 9 }]),
+    with_('myValues', { y: '50' }), with_('myValues', { y: 2.5 }), with_('myValues', []),
+    with_('csv', { name: 'p.csv', players: [{ id: 'a', name: 'A' }] }),
+  ];
+  for (const s of damaged) assert.equal(usableSave(s, keys), false, JSON.stringify(s));
 });
