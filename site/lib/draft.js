@@ -39,9 +39,11 @@ export function parseDollars(text) {
   if (!s) return { error: 'Enter an amount in whole dollars, like 25.' };
   if (/(?![0-9])\p{Nd}/u.test(s)) return { error: `Type “${typed}” with the digits 0-9.` };
   if (/^[-−]/.test(s)) return { error: 'Amounts are at least $1.' };
+  const digits = s.replace(/\D/g, '');
+  // Past about 16 digits a number can't be held exactly, and no budget is near it.
+  if (digits.length > 15) return { error: 'That amount is more than any league’s budget.' };
   if (/^\d+$/.test(s)) return { value: Number(s) };
   const seps = new Set(s.match(/\D/g));
-  const digits = s.replace(/\D/g, '');
   // Thousands grouped with commas or a kind of space, or with dots in two or more groups.
   const grouped = new RegExp(`^\\d{1,3}([,]\\d{3})+$|^\\d{1,3}(${SPACES.source}\\d{3})+$|^\\d{1,3}(\\.\\d{3}){2,}$`);
   if (seps.size === 1 && grouped.test(s)) return { value: Number(digits) };

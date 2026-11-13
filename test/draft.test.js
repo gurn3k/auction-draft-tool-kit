@@ -128,6 +128,7 @@ test('typed dollar amounts are read as whole dollars or refused with the reason'
     ['12,34,567', /isn’t an amount/], ['1,200 300', /isn’t an amount/],
     ['-5', /at least \$1/], ['−5', /at least \$1/], ['abc', /isn’t an amount/], ['5e2', /isn’t an amount/], ['0x10', /isn’t an amount/], ['56$', /isn’t an amount/],
     ['٥٦', /digits 0-9/], ['５６', /digits 0-9/],
+    ['9'.repeat(400), /more than any league’s budget/], ['1,000,000,000,000,000', /more than any league’s budget/],
   ];
   for (const [text, message] of refused) {
     const r = parseDollars(text);
