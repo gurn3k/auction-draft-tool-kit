@@ -177,3 +177,109 @@ test('players who miss games as regulars lose 10% of their value above replaceme
   const priced = v.filter((p) => p.value > 0);
   assert.ok(Math.abs(priced.reduce((a, p) => a + p.value, 0) - small.teams * small.budget) < 1e-6);
 });
+
+// The board shows whole dollars, so the promise is checked on those: a manager
+// adding up the Value or Live column gets exactly the money.
+const history = JSON.parse(readFileSync(new URL('../site/data/rookie-history.json', import.meta.url), 'utf8'));
+const whole = (xs) => xs.every((x) => Number.isInteger(x));
+const sum = (xs) => xs.reduce((a, b) => a + b, 0);
+
+test('pre-draft values are whole dollars that add up to exactly $2,400 with Yahoo defaults, rookies included', () => {
+  for (const rookieHistory of [null, history]) {
+    const priced = valuePlayers(data.players, YAHOO_DEFAULTS, { rookieHistory }).filter((p) => p.value > 0);
+    assert.equal(priced.length, 156);
+    assert.ok(whole(priced.map((p) => p.value)));
+    assert.equal(sum(priced.map((p) => p.value)), 2400);
+    assert.ok(priced.every((p) => p.value >= 1));
+  }
+});
+
+// A seeded generator, so a failure names a league that can be rerun.
+function random(seed) {
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  return { rnd, int: (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1)) };
+}
+
+// Random legal picks: each at a price the buying team can afford.
+function randomPicks(v, league, { rnd, int }, count) {
+  const spent = Array(league.teams).fill(0);
+  const filled = Array(league.teams).fill(0);
+  const pool = [...v];
+  const picks = [];
+  for (let n = 0; n < count && pool.length; n++) {
+    const team = int(0, league.teams - 1);
+    const open = league.rosterSize - filled[team];
+    if (open <= 0) continue;
+    const maxBid = league.budget - spent[team] - (open - 1);
+    const price = rnd() < 0.3 ? maxBid : int(1, maxBid);
+    const [p] = pool.splice(int(0, Math.min(pool.length - 1, 40)), 1);
+    picks.push({ playerId: p.id, price, team });
+    spent[team] += price;
+    filled[team]++;
+  }
+  return picks;
+}
+
+// My values a user could set: each a whole dollar no team is barred from
+// bidding, and all of them leaving $1 for every other roster spot (ADR 0011).
+function randomMyValues(v, league, { rnd, int }) {
+  const most = league.budget - league.rosterSize + 1;
+  const myValues = {};
+  let room = league.teams * league.budget - league.teams * league.rosterSize;
+  for (let k = int(0, 6); k > 0; k--) {
+    const p = v[int(0, v.length - 1)];
+    if (myValues[p.id]) continue;
+    const n = Math.min(int(1, most), 1 + room);
+    if (n < 1) break;
+    myValues[p.id] = n;
+    room -= n - 1;
+  }
+  return myValues;
+}
+
+test('random leagues, My values, rookies and picks: whole-dollar prices always add up to the money left', () => {
+  const r = random(7);
+  for (let run = 0; run < 200; run++) {
+    const rosterSize = r.int(1, 25);
+    const league = { teams: r.int(2, 20), rosterSize, budget: r.int(rosterSize, 400), minGames: r.int(0, 82) };
+    const categories = CATEGORIES.filter(() => r.rnd() < 0.6);
+    const options = { categories: categories.length ? categories : CATEGORIES.slice(0, 1), rookieHistory: r.rnd() < 0.7 ? history : null };
+    const plain = valuePlayers(data.players, league, options);
+    const myValues = randomMyValues(plain, league, r);
+    const v = valuePlayers(data.players, league, { ...options, myValues });
+    const label = JSON.stringify({ run, league, myValues });
+    const pre = v.map((p) => p.value);
+    assert.ok(whole(pre), label);
+    assert.equal(sum(pre), league.teams * league.budget, label);
+    for (const [id, n] of Object.entries(myValues)) assert.equal(v.find((p) => p.id === id).value, n, label);
+
+    const picks = randomPicks(plain, league, r, r.int(0, league.teams * league.rosterSize));
+    const live = livePrices(plain, picks, league);
+    const prices = [...live.prices.values()];
+    assert.ok(whole(prices), label);
+    if (live.slotsLeft > 0 && prices.length) {
+      assert.equal(sum(prices), live.moneyLeft, `${label} after ${picks.length} picks`);
+      assert.ok(prices.every((x) => x >= 1), label);
+    }
+  }
+});
+
+test('whole-dollar rounding keeps every price within $1 of its exact share, in rank order', () => {
+  const ranked = [{ id: 'a', total: 3 }, { id: 'b', total: 2 }, { id: 'c', total: 1 }, { id: 'd', total: 0 }];
+  // Exact shares: 1 + 7 × (3, 2, 1) / 6 = 4.5, 3.33, 2.17.
+  assert.deepEqual([...allocate(ranked, 3, 10).values()], [5, 3, 2]);
+});
+
+test('a league with less money than spots is shared out without inventing money', () => {
+  const ranked = [{ id: 'a', total: 3 }, { id: 'b', total: 2 }, { id: 'c', total: 1 }];
+  assert.equal(sum([...allocate(ranked, 3, 2).values()]), 2);
+  assert.equal(sum([...allocate(ranked, 3, -5).values()]), 0);
+});
+
+test('rookies with no estimate never set replacement level, so the others are still priced by value', () => {
+  const ranked = [{ id: 'a', total: 3 }, { id: 'b', total: 1 }, { id: 'r1', total: -Infinity }, { id: 'r2', total: -Infinity }];
+  const prices = allocate(ranked, 3, 30);
+  assert.ok(prices.get('a') > prices.get('b'));
+  assert.equal(prices.get('r1'), 1);
+  assert.equal(sum([...prices.values()]), 30);
+});

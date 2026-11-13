@@ -62,20 +62,38 @@ function scorePool(players, pool, categories) {
   });
 }
 
+// Rounds shares to whole dollars without losing or inventing any: each share is
+// rounded down, then the dollars left over go to the largest fractions (ties to
+// the better-ranked player). Shares in rank order stay in rank order, and none
+// moves by more than $1.
+export function wholeDollars(shares, total) {
+  const out = shares.map(Math.floor);
+  let left = total - out.reduce((a, b) => a + b, 0);
+  const order = shares.map((_, i) => i).sort((a, b) => (shares[b] - out[b]) - (shares[a] - out[a]) || a - b);
+  for (let k = 0; left > 0 && k < order.length; k++, left--) out[order[k]]++;
+  return out;
+}
+
 // Spreads `money` across the best `slots` players by value over replacement.
 // Every rostered player costs at least $1, so only money beyond $1 a slot is
 // shared out. Replacement level is the best player who won't get rostered.
+// Bids are whole dollars, so prices are too, and they still add up to `money`.
 export function allocate(ranked, slots, money) {
   const prices = new Map();
   if (slots <= 0 || ranked.length === 0) return prices;
   const top = ranked.slice(0, slots);
-  const replacement = ranked[slots]?.total ?? top[top.length - 1].total;
+  // A rookie with no estimate sits at -Infinity; he never sets replacement level.
+  let replacement = ranked[slots]?.total ?? top[top.length - 1].total;
+  if (!Number.isFinite(replacement)) replacement = top.filter((p) => Number.isFinite(p.total)).at(-1)?.total ?? 0;
   const over = top.map((p) => Math.max(0, p.total - replacement));
   const sum = over.reduce((a, b) => a + b, 0);
-  const surplus = Math.max(0, money - top.length);
-  top.forEach((p, i) => {
-    prices.set(p.id, sum > 0 ? 1 + (over[i] / sum) * surplus : money / top.length);
-  });
+  const cash = Math.max(0, money);
+  // $1 a player, or an even share if there isn't $1 for each: never more money than there is.
+  const floor = Math.min(1, cash / top.length);
+  const surplus = cash - floor * top.length;
+  const shares = top.map((_, i) => (sum > 0 ? floor + (over[i] / sum) * surplus : cash / top.length));
+  const final = Number.isInteger(cash) ? wholeDollars(shares, cash) : shares;
+  top.forEach((p, i) => prices.set(p.id, final[i]));
   return prices;
 }
 
