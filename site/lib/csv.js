@@ -45,6 +45,7 @@ const ALIASES = {
   blk: ['blk', 'blocks'],
   tov: ['to', 'tov', 'turnovers'],
 };
+const NUMBER = /^(\d+(\.\d*)?|\.\d+)$/;
 const norm = (h) => h.toLowerCase().replace(/[\s._]/g, '');
 const REQUIRED = ['name', 'fga', 'fta', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'tov'];
 
@@ -70,22 +71,36 @@ export function projectionsFromCsv(text) {
   const pct = (v) => (v > 1 ? v / 100 : v); // accept 47.5 or .475
   rows.slice(1).forEach((r, n) => {
     const get = (k) => (col[k] === undefined ? undefined : r[col[k]]?.trim() ?? '');
-    const num = (k) => Number(get(k));
     const name = get('name');
     if (!name) return;
+    // Plain non-negative decimals only. A blank cell (or a row cut short) is
+    // reported rather than read as 0, which would value a player on zeros nobody
+    // typed; so are "-13", "0x10" (16 to Number()), "1e1" and "13,5".
+    let problem = null;
+    const num = (k, ifBlank) => {
+      const v = get(k);
+      if (v === '' && ifBlank !== undefined) return ifBlank;
+      const label = { fgpct: 'fg%', ftpct: 'ft%' }[k] ?? k;
+      if (v === '') problem ??= `"${label}" is blank`;
+      else if (!NUMBER.test(v)) problem ??= `"${label}" is not a number`;
+      return problem ? NaN : Number(v);
+    };
     const p = {
       name,
       team: get('team') ?? '',
       pos: get('pos') ?? '',
       gp: col.gp === undefined ? 82 : num('gp'),
-      mpg: col.mpg === undefined ? 0 : num('mpg'),
+      mpg: col.mpg === undefined ? 0 : num('mpg', 0), // only shown, never valued
       fga: num('fga'), fta: num('fta'), tpm: num('tpm'), pts: num('pts'), reb: num('reb'),
       ast: num('ast'), stl: num('stl'), blk: num('blk'), tov: num('tov'),
     };
-    p.fgm = col.fgm !== undefined ? num('fgm') : pct(num('fgpct')) * p.fga;
-    p.ftm = col.ftm !== undefined ? num('ftm') : pct(num('ftpct')) * p.fta;
-    const bad = Object.entries(p).find(([k, v]) => typeof v === 'number' && !Number.isFinite(v));
-    if (bad) { errors.push(`Row ${n + 2} (${name}): "${bad[0]}" is not a number.`); return; }
+    // No attempts often comes with a blank percentage, and then nothing was made.
+    p.fgm = col.fgm !== undefined ? num('fgm') : pct(num('fgpct', p.fga === 0 ? 0 : undefined)) * p.fga;
+    p.ftm = col.ftm !== undefined ? num('ftm') : pct(num('ftpct', p.fta === 0 ? 0 : undefined)) * p.fta;
+    const round = (x) => Math.round(x * 100) / 100;
+    if (!problem && p.fgm > p.fga + 1e-9) problem = `more field goals made (${round(p.fgm)}) than attempted (${p.fga})`;
+    if (!problem && p.ftm > p.fta + 1e-9) problem = `more free throws made (${round(p.ftm)}) than attempted (${p.fta})`;
+    if (problem) { errors.push(`Row ${n + 2} (${name}): ${problem}.`); return; }
     let id = `csv-${slug(name)}`;
     while (ids.has(id)) id += '-2';
     ids.add(id);
