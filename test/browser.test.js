@@ -189,3 +189,20 @@ test('typed prices, budgets and My values are read as whole dollars or refused o
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
+
+test('two rookies logged by non-Latin names are two players, not one, and markup stays text', { skip }, async () => {
+  const page = await open();
+  for (const name of ['Ли Вэй', '김민수', '<b>Bold</b> & Co']) {
+    assert.match(await logPick(page, name, 3, 1), /isn’t in the player data/);
+    assert.match(await logPick(page, name, 3, 1), /logged by name only/, name);
+  }
+  await page.click('#tab-picks');
+  assert.deepEqual(await page.$$eval('#panel-picks li > span:first-child', (xs) => xs.map((x) => x.textContent)),
+    ['3. <b>Bold</b> & Co → Team 2', '2. 김민수 → Team 2', '1. Ли Вэй → Team 2']);
+  assert.equal(await page.$$eval('#panel-picks b, #sold-strip b', (xs) => xs.filter((x) => x.textContent === 'Bold').length), 0);
+  // The same name twice is still one player.
+  await logPick(page, '김민수', 3, 2);
+  assert.match(await logPick(page, '김민수', 3, 2), /already been drafted/);
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});

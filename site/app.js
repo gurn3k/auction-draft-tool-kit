@@ -5,6 +5,7 @@ import { LEAGUE_LIMITS, SCARCE_LEFT, addPick, bidCeiling, categorySupply, catego
 import { projectionsFromCsv } from './lib/csv.js';
 import { fitDrivers, fitFactor, fitStrength, needWeights, worthToYou } from './lib/fit.js';
 import { findPlayer } from './lib/match.js';
+import { customId } from './lib/names.js';
 
 const STORE = 'cap-drafter:v1';
 const $ = (id) => document.getElementById(id);
@@ -25,7 +26,6 @@ const money = (n) => `$${Math.round(n).toLocaleString('en-US')}`;
 const pct = (n) => `${n >= 0 ? '+' : '−'}${Math.abs(n * 100).toFixed(1)}%`;
 const fmtZ = (z) => (Math.abs(z) < 0.05 ? '0.0' : `${z > 0 ? '' : '−'}${Math.abs(z).toFixed(1)}`);
 const zClass = (z) => (z >= 1.5 ? 'g3' : z >= 0.75 ? 'g2' : z >= 0.25 ? 'g1' : z <= -1.5 ? 'b3' : z <= -0.75 ? 'b2' : z <= -0.25 ? 'b1' : '');
-const slug = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const fold = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 const state = {
@@ -408,7 +408,7 @@ function resolvePlayer(text, byId) {
     unknownPending = t;
     return { error: `“${t}” isn’t in the player data. Check the spelling, or press Enter again to log him by name (for a rookie).` };
   }
-  return { playerId: `custom-${slug(t)}`, name: t, custom: true };
+  return { playerId: customId(t), name: t, custom: true };
 }
 
 $('log-form').addEventListener('submit', (e) => {

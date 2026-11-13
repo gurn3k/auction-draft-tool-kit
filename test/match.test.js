@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { findPlayer } from '../site/lib/match.js';
+import { customId } from '../site/lib/names.js';
 
 const pool = [
   { id: 'jokic', name: 'Nikola Jokić', team: 'DEN', rank: 1, aliases: ['Nikola Jokic'] },
@@ -63,4 +64,13 @@ test('an exact surname does not drag in a one-letter-off player', () => {
 test('nothing close is unknown', () => {
   assert.equal(find('Zxq Player').kind, 'unknown');
   assert.equal(find('  '), null);
+});
+
+test('a name logged by hand gets its own id in any script, and Latin names keep their old ids', () => {
+  assert.equal(customId('José García'), 'custom-jose-garcia');
+  assert.equal(customId('  Nikola  Jokić '), 'custom-nikola-jokic');
+  const ids = ['Ли Вэй', '김민수', '李伟', 'Ли Вэй Jr'].map(customId);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(ids.every((id) => id.length > 'custom-'.length));
+  assert.equal(customId('김민수'), customId(' 김민수 '));
 });
