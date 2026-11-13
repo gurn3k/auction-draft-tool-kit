@@ -45,9 +45,10 @@ I recorded each decision as an ADR while I built, including the ones that revers
 
 ## How I know the numbers are right
 
-- **The maths is tested.** 89 tests run with `npm test`. They check that whole-dollar values add up to exactly teams × budget, and that live prices share out exactly the money left, across 350 random leagues with My values, rookies and random legal picks. They also check that illegal picks and unclear typed amounts are refused, and that CSV import and name matching work. 9 of them drive the page in headless Chromium when Playwright is installed, and are skipped when it isn't, as in CI.
+- **The maths is tested.** 90 tests run with `npm test`. They check that whole-dollar values add up to exactly teams × budget, and that live prices share out exactly the money left, across 350 random leagues with My values, rookies and random legal picks. They also check that illegal picks and unclear typed amounts are refused, and that CSV import and name matching work. 10 of them drive the page in headless Chromium when Playwright is installed, and are skipped when it isn't, as in CI.
 - **The data is cross-checked.** Moving to licensed data changed no one's value (checked on 2026-10-19). Today, with Yahoo defaults, rookie values and the missed-games discount: Nikola Jokić $75, Victor Wembanyama $70, Shai Gilgeous-Alexander $64, and 156 players priced at exactly $2,400. A test keeps these figures in line with the code.
 - **It has been used in a live draft run.** I ran it beside a Yahoo draft room on 2026-10-18.
+- **I tried to break it.** A review on 2026-11-13 found 18 problems, the worst a Value column that added up to $2,402 in a $2,400 league. All 18 are fixed, each with a test. Every finding, and what's still open: [docs/FINDINGS.md](docs/FINDINGS.md).
 
 ## What's next
 
