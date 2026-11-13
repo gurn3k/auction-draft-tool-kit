@@ -214,6 +214,7 @@ function onLeagueChange({ quiet = false } = {}) {
   render();
 }
 
+const LAST_CATEGORY = 'Values need at least one category, so the last one stays ticked.';
 form.addEventListener('change', (e) => {
   const name = e.target.name;
   if (name === 'myTeam') {
@@ -229,7 +230,12 @@ form.addEventListener('change', (e) => {
     render();
   } else if (name === 'cat') {
     const picked = [...form.querySelectorAll('input[name="cat"]:checked')].map((x) => x.value);
-    if (!picked.length) { e.target.checked = true; return; } // values need at least one category
+    // Values need at least one category, so the last one stays ticked, and says why.
+    if (!picked.length) {
+      e.target.checked = true;
+      return showSetupProblem({ message: LAST_CATEGORY });
+    }
+    if ($('setup-msg').textContent === LAST_CATEGORY) showSetupProblem(null); // leave other fields' problems up
     // All 9 is the default; store null so it reads as "standard 9-cat".
     state.league = { ...state.league, categories: picked.length === CATEGORIES.length ? null : picked };
     render();

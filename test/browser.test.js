@@ -273,3 +273,15 @@ test('at every width, even with a wider fallback font, nothing pushes the page s
   }
   assert.deepEqual(problems, []);
 });
+
+test('unticking the last category is refused with a reason', { skip }, async () => {
+  const page = await open();
+  for (const key of ['ft', 'tpm', 'pts', 'reb', 'ast', 'stl', 'blk', 'tov']) await page.uncheck(`#cat-boxes input[value=${key}]`);
+  await page.click('#cat-boxes input[value=fg]');
+  assert.equal(await page.isChecked('#cat-boxes input[value=fg]'), true);
+  assert.match(await page.textContent('#setup-msg'), /at least one category/);
+  await page.check('#cat-boxes input[value=pts]');
+  assert.equal(await page.textContent('#setup-msg'), '');
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
