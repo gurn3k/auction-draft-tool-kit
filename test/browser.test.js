@@ -147,3 +147,45 @@ test('League setup refuses settings it cannot use, says why, and keeps the last 
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
+
+test('typed prices, budgets and My values are read as whole dollars or refused out loud, never misread', { skip }, async () => {
+  const page = await open();
+  const typePrice = (text) => logPick(page, 'Tyrese Maxey', text, 2);
+  assert.match(await typePrice('0,5'), /whole dollars, and “0,5” has cents/);
+  assert.match(await typePrice('12,5'), /“12,5” has cents/);
+  assert.match(await typePrice('1.200'), /could be \$1,200 or \$1\.20/);
+  assert.match(await typePrice('1,200'), /can bid at most \$188/, '1,200 is read as $1,200');
+  assert.match(await typePrice('-5'), /at least \$1/);
+  assert.match(await typePrice('lots'), /isn’t an amount/);
+  assert.equal(await page.textContent('#pick-count'), '', 'nothing logged so far');
+  assert.match(await typePrice('$56'), /Tyrese Maxey to Team 3 for \$56/);
+
+  // The budget box reads money the same way.
+  await page.fill('#setup-form [name=budget]', '2,5');
+  await page.press('#setup-form [name=budget]', 'Tab');
+  assert.match(await page.textContent('#setup-msg'), /Budget per team: .*“2,5” has cents/);
+  assert.match(await page.textContent('#setup-sum'), /\$200 budget/);
+  await page.fill('#setup-form [name=budget]', '1,000');
+  await page.press('#setup-form [name=budget]', 'Tab');
+  assert.match(await page.textContent('#setup-sum'), /\$1,000 budget/);
+
+  // So do My values, on the board and on the card.
+  const cell = '#players-body tr[data-id]:not(.drafted) td.val[data-edit]';
+  const id = await page.$eval(cell, (td) => td.closest('tr').dataset.id);
+  await page.click(cell);
+  await page.keyboard.type('1,5');
+  await page.keyboard.press('Enter');
+  assert.match(await page.textContent('#log-msg'), /My value: .*“1,5” has cents/);
+  assert.equal(await page.$eval(`tr[data-id="${id}"] td.val`, (td) => td.classList.contains('mine')), false);
+  await page.keyboard.press('Escape');
+  await page.click(`tr[data-id="${id}"] td.player`);
+  await page.fill('#my-value', '1.200');
+  await page.press('#my-value', 'Enter');
+  assert.match(await page.textContent('#log-msg'), /My value: .*could be \$1,200 or \$1\.20/);
+  await page.fill('#my-value', '$40');
+  await page.press('#my-value', 'Enter');
+  assert.match(await page.textContent('#log-msg'), /to \$40/);
+  assert.equal(await page.textContent('#b-value'), '$40');
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});

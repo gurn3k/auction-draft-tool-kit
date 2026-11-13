@@ -73,7 +73,7 @@
       <summary><span>League setup</span><span class="setup-sum" id="setup-sum"></span></summary>
       <form class="setup-grid" id="setup-form">
         <label>Budget per team <span class="hint">set by your commissioner</span>
-          <span class="money-input"><span aria-hidden="true">$</span><input name="budget" type="number" min="1" max="2000" step="1" required></span>
+          <span class="money-input"><span aria-hidden="true">$</span><input name="budget" inputmode="numeric" autocomplete="off" required></span>
         </label>
         <label>Teams <span class="hint">in your league</span>
           <input name="teams" type="number" min="2" max="20" step="1" required>
@@ -141,7 +141,7 @@
       <div class="b-prices">
         <div><span class="b-label" id="b-value-label">Pre-draft</span><b class="b-value" id="b-value"></b>
           <form class="my-value" id="my-value-form" autocomplete="off" hidden>
-            <span class="money-input"><span aria-hidden="true">$</span><input id="my-value" type="number" min="1" step="1" placeholder="Mine" aria-label="My value for this player"></span>
+            <span class="money-input"><span aria-hidden="true">$</span><input id="my-value" inputmode="numeric" autocomplete="off" placeholder="Mine" aria-label="My value for this player"></span>
             <button type="submit" class="quiet">Set</button>
             <button type="button" class="quiet" id="my-value-clear" hidden>Clear</button>
           </form>
@@ -159,7 +159,7 @@
           <datalist id="player-options"></datalist>
         </label>
         <label class="log-price">Price
-          <span class="money-input"><span aria-hidden="true">$</span><input id="log-price" type="number" min="1" step="1" required></span>
+          <span class="money-input"><span aria-hidden="true">$</span><input id="log-price" inputmode="numeric" autocomplete="off" required></span>
         </label>
         <label class="log-team">Bought by
           <select id="log-team" required></select>

@@ -27,6 +27,31 @@ export function teamSummaries(draft, league) {
 // should quietly become a league setting.
 export const wholeNumber = (text) => (/^\s*\d+\s*$/.test(String(text ?? '')) ? Number(text) : NaN);
 
+// Reads a typed dollar amount (a price, a budget or a My value) as whole
+// dollars: "56", "$56", "1,200", "1 200". Anything that could mean two amounts,
+// or isn't whole dollars, is refused with the reason, never guessed: "1.200" is
+// $1,200 in some countries and $1.20 in others, and "0,5" is half a dollar, not
+// $5. Returns { value } or { error }.
+const SPACES = /[    ]/; // plain, no-break, narrow no-break and thin spaces
+export function parseDollars(text) {
+  const typed = String(text ?? '').trim();
+  const s = typed.replace(/^\$\s*/, '');
+  if (!s) return { error: 'Enter an amount in whole dollars, like 25.' };
+  if (/(?![0-9])\p{Nd}/u.test(s)) return { error: `Type “${typed}” with the digits 0-9.` };
+  if (/^[-−]/.test(s)) return { error: 'Amounts are at least $1.' };
+  if (/^\d+$/.test(s)) return { value: Number(s) };
+  const seps = new Set(s.match(/\D/g));
+  const digits = s.replace(/\D/g, '');
+  // Thousands grouped with commas or a kind of space, or with dots in two or more groups.
+  const grouped = new RegExp(`^\\d{1,3}([,]\\d{3})+$|^\\d{1,3}(${SPACES.source}\\d{3})+$|^\\d{1,3}(\\.\\d{3}){2,}$`);
+  if (seps.size === 1 && grouped.test(s)) return { value: Number(digits) };
+  if (/^\d{1,3}\.\d{3}$/.test(s)) {
+    return { error: `“${s}” could be $${Number(digits).toLocaleString('en-US')} or $${Number(s).toFixed(2)}. Type whole dollars with no separator, like ${digits}.` };
+  }
+  if (/^\d*[.,]\d+$/.test(s)) return { error: `Amounts are in whole dollars, and “${s}” has cents.` };
+  return { error: `“${s}” isn’t an amount. Type whole dollars, like 25.` };
+}
+
 // The league settings the app accepts. Every team must be able to fill every
 // spot at $1, so the budget is at least the number of roster spots.
 export const LEAGUE_LIMITS = {

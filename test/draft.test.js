@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addPick, bidCeiling, categorySupply, categoryTotals, checkPick, leagueProblem, newDraft, removePick, scarceStrengths, teamSummaries, wholeNumber } from '../site/lib/draft.js';
+import { addPick, bidCeiling, categorySupply, categoryTotals, checkPick, leagueProblem, newDraft, parseDollars, removePick, scarceStrengths, teamSummaries, wholeNumber } from '../site/lib/draft.js';
 
 const league = { teams: 3, budget: 20, rosterSize: 3, minGames: 0 };
 
@@ -111,4 +111,27 @@ test('the budget cannot drop below what a team has spent plus $1 for each spot i
 test('whole numbers typed in a box are read exactly, and nothing else is', () => {
   for (const [text, n] of [['12', 12], [' 7 ', 7], ['0', 0]]) assert.equal(wholeNumber(text), n, text);
   for (const text of ['', ' ', '12.5', '1e1', '0x10', '-3', '+3', '1,2', 'ten', '١٢']) assert.ok(Number.isNaN(wholeNumber(text)), text);
+});
+
+// Typed prices, budgets and My values: each entry is read as one number or
+// refused with the reason, never quietly turned into a different number.
+test('typed dollar amounts are read as whole dollars or refused with the reason', () => {
+  const read = [
+    ['56', 56], ['$56', 56], ['$ 56', 56], [' 7 ', 7], ['1,200', 1200], ['1 200', 1200], ['1 200', 1200], ['1 200', 1200],
+    ['12,345,678', 12345678], ['1.200.000', 1200000], ['0', 0],
+  ];
+  for (const [text, n] of read) assert.deepEqual(parseDollars(text), { value: n }, text);
+  const refused = [
+    ['', /Enter/], ['   ', /Enter/], [null, /Enter/],
+    ['0,5', /whole dollars, and “0,5” has cents/], ['1.5', /has cents/], ['12.50', /has cents/], ['1,20', /has cents/],
+    ['1.200', /could be \$1,200 or \$1\.20/],
+    ['12,34,567', /isn’t an amount/], ['1,200 300', /isn’t an amount/],
+    ['-5', /at least \$1/], ['−5', /at least \$1/], ['abc', /isn’t an amount/], ['5e2', /isn’t an amount/], ['0x10', /isn’t an amount/], ['56$', /isn’t an amount/],
+    ['٥٦', /digits 0-9/], ['５６', /digits 0-9/],
+  ];
+  for (const [text, message] of refused) {
+    const r = parseDollars(text);
+    assert.equal(r.value, undefined, text);
+    assert.match(r.error, message, text);
+  }
 });

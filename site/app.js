@@ -1,7 +1,7 @@
 // Draft-room UI. All the maths lives in lib/; this file reads the forms, keeps
 // state in memory (and in localStorage as a convenience) and renders.
 import { CATEGORIES, DURABILITY, YAHOO_DEFAULTS, livePrices, myValueRoom, rosterSpots, shortSeasons, valuePlayers } from './lib/valuation.js';
-import { LEAGUE_LIMITS, SCARCE_LEFT, addPick, bidCeiling, categorySupply, categoryTotals, checkPick, leagueProblem, newDraft, removePick, scarceStrengths, teamSummaries, wholeNumber } from './lib/draft.js';
+import { LEAGUE_LIMITS, SCARCE_LEFT, addPick, bidCeiling, categorySupply, categoryTotals, checkPick, leagueProblem, newDraft, parseDollars, removePick, scarceStrengths, teamSummaries, wholeNumber } from './lib/draft.js';
 import { projectionsFromCsv } from './lib/csv.js';
 import { fitDrivers, fitFactor, fitStrength, needWeights, worthToYou } from './lib/fit.js';
 import { findPlayer } from './lib/match.js';
@@ -159,15 +159,20 @@ function setupSummary() {
 function readLeague() {
   // Whole numbers only: a blank box, "12.5" or "1e1" is refused, not rounded or guessed.
   const n = (k) => wholeNumber(form.elements[k].value);
-  return { teams: n('teams'), budget: n('budget'), rosterSize: n('rosterSize'), minGames: n('minGames'), categories: state.league.categories };
+  // The budget is typed money, read like a price: "1,000" yes, "1.000" asks which.
+  const budget = parseDollars(form.elements.budget.value);
+  return {
+    next: { teams: n('teams'), budget: budget.value ?? NaN, rosterSize: n('rosterSize'), minGames: n('minGames'), categories: state.league.categories },
+    budgetError: budget.error,
+  };
 }
 
 // `quiet` is for the pause while typing: a good value is applied, but a half-typed
 // one isn't flagged until the box is left or Enter is pressed.
 function onLeagueChange({ quiet = false } = {}) {
-  const next = readLeague();
+  const { next, budgetError } = readLeague();
   const shapeChanged = next.teams !== state.league.teams || next.rosterSize !== state.league.rosterSize;
-  const problem = leagueProblem(next, shapeChanged ? null : state.draft);
+  const problem = budgetError ? { field: 'budget', message: `Budget per team: ${budgetError}` } : leagueProblem(next, shapeChanged ? null : state.draft);
   if (!quiet || !problem) showSetupProblem(problem);
   // A number input also fires "change" on blur. Re-rendering then would swap the
   // table out from under the click that caused the blur, so do nothing if unchanged.
@@ -267,6 +272,12 @@ function setMyValue(id, n) {
   logMsg(`Set your value for ${getValued().find((p) => p.id === id)?.name ?? 'him'} to ${money(n)}. Other prices were re-shared around it.`);
   return true;
 }
+// A value typed on the board or the card: read as whole dollars, or refused with the reason.
+function setTypedValue(id, text) {
+  const typed = parseDollars(text);
+  if (typed.error) return logMsg(`My value: ${typed.error}`, 'error'), false;
+  return setMyValue(id, typed.value);
+}
 function clearMyValue(id) {
   const { [id]: _, ...rest } = state.myValues;
   state.myValues = rest;
@@ -277,7 +288,7 @@ function clearMyValue(id) {
 }
 $('my-value-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  setMyValue(state.selected, Number($('my-value').value));
+  setTypedValue(state.selected, $('my-value').value);
 });
 $('my-value-clear').addEventListener('click', () => clearMyValue(state.selected));
 
@@ -295,7 +306,8 @@ function editValueCell(target) {
   const p = getValued().find((x) => x.id === id);
   if (!p) return;
   const start = p.mine ? String(state.myValues[id]) : p.value >= 0.5 ? String(Math.round(p.value)) : '';
-  const input = el('input', { type: 'number', min: 1, step: 1, value: start, 'aria-label': `My value for ${p.name}` });
+  // A text box, not a number box: the browser's number box drops a comma, so "1,5" became $15.
+  const input = el('input', { inputmode: 'numeric', autocomplete: 'off', value: start, 'aria-label': `My value for ${p.name}` });
   td.replaceChildren(input);
   input.focus();
   input.select();
@@ -309,7 +321,7 @@ function editValueCell(target) {
     const text = input.value.trim();
     if (text === start) render(); // unchanged: never pins a player just for visiting him
     else if (!text) (p.mine ? clearMyValue(id) : render());
-    else if (!setMyValue(id, Number(text))) {
+    else if (!setTypedValue(id, text)) {
       // Refused (the reason is shown): stay on him to fix it, unless he clicked away.
       render();
       if (move && valueCell(id)) editValueCell(valueCell(id));
@@ -403,7 +415,8 @@ $('log-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const { byId } = derive();
   const who = resolvePlayer($('log-player').value, byId);
-  const price = Number($('log-price').value);
+  const typedPrice = parseDollars($('log-price').value);
+  const price = typedPrice.value;
   const team = Number($('log-team').value);
   if (state.draft.picks.length >= state.league.teams * state.league.rosterSize) return logMsg('The draft is over: every roster is full.', 'error');
   if (who.error) return logMsg(who.error, 'error');
@@ -415,6 +428,7 @@ $('log-form').addEventListener('submit', (e) => {
     return logMsg('Which player? ', 'error', ...who.suggest.flatMap((p, i) => [i ? ' ' : '',
       el('button', { type: 'button', class: 'suggest', onclick: () => pickSuggestion(p) }, optionLabel(p))]));
   }
+  if (typedPrice.error) return logMsg(`Price: ${typedPrice.error}`, 'error');
   unknownPending = '';
   const pick = { playerId: who.playerId, name: who.name, price, team };
   const error = checkPick(state.draft, state.league, pick);
