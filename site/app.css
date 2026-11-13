@@ -215,7 +215,7 @@ td.val[data-edit] input::-webkit-inner-spin-button { display: none; }
 /* Recent sales */
 .sold { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px; padding: 10px 24px; background: var(--deep); border-bottom: 2px solid var(--seam); font-size: 14px; }
 .sold .more { min-height: 32px; padding: 0 10px; font-size: 12px; border-width: 1px; color: var(--ink-2); }
-.sold > span { white-space: nowrap; }
+.sold > span { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .sold .b-label { margin-right: 4px; }
 .sold b { color: var(--amber); }
 .sold .to { color: var(--ink-3); }
@@ -372,7 +372,7 @@ table.teams { width: 100%; border-collapse: collapse; font-size: 14px; }
   .ticker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .tick { padding: 10px 12px; gap: 4px; justify-content: space-between; }
   .tick-label { font-size: 11px; letter-spacing: 0.1em; }
-  .tick b { font-size: 26px; }
+  .tick b { font-size: clamp(18px, 6.2vw, 26px); max-width: 100%; }
   .tick-note { display: none; }
   .home { grid-column: 1 / -1; }
   .block > * { padding: 14px 16px; }
@@ -381,7 +381,7 @@ table.teams { width: 100%; border-collapse: collapse; font-size: 14px; }
   .pl-num { font-size: 34px; }
   .pl-num.long { font-size: 30px; }
   .pl-team, .pl-pos { font-size: 10px; letter-spacing: 0.08em; }
-  .b-prices { flex-direction: row; gap: 24px; flex: 1 1 0; }
+  .b-prices { flex-direction: row; flex-wrap: wrap; align-content: center; gap: 10px 20px; flex: 1 1 0; min-width: 0; }
   .b-bid { flex: 1 1 0; }
   .b-bid b { font-size: 56px; }
   .b-cats span { font-size: 12px; padding: 4px 0; }

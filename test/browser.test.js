@@ -240,3 +240,36 @@ test('a damaged save starts a fresh draft and says so, instead of a blank page, 
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
+
+// Every width either side of each breakpoint (640, 720, 1180), with the bundled
+// font and with a wider one that a phone or Linux may fall back to. Each element
+// is measured against its own box, not the window.
+const WIDTHS = [360, 390, 640, 641, 720, 721, 960, 1180, 1181, 1440];
+test('at every width, even with a wider fallback font, nothing pushes the page sideways', { skip }, async () => {
+  // A big league ($2,000 budgets), the longest team name allowed, a big sale, and a refusal showing.
+  const teams = Array.from({ length: 20 }, (_, i) => ({ name: i === 0 ? 'My team' : i === 1 ? 'The Extremely Long Team Name Of Dunkers!' : `Team ${i + 1}` }));
+  const storage = savedDraft({ league: { teams: 20, budget: 2000 }, teams, picks: [{ playerId: 'bdl-246', name: 'Nikola Jokic', price: 1999, team: 1 }] });
+  const problems = [];
+  for (const wide of [false, true]) {
+    for (const width of WIDTHS) {
+      const page = await open({ width, storage, context: { bypassCSP: true } });
+      if (wide) await page.addStyleTag({ content: '* { font-family: "DejaVu Sans", Verdana, sans-serif !important; letter-spacing: 0.02em; }' });
+      await page.fill('#search', 'Shai Gilgeous-Alexander');
+      await page.evaluate(() => { document.getElementById('setup').open = true; });
+      await page.fill('[name=teams]', '30');
+      await page.press('[name=teams]', 'Tab');
+      const found = await page.evaluate(() => {
+        const sel = '.sold > *, .tick, .tick b, .b-prices > div, .b-bid, .b-title, .my-value, .log > *, .setup-grid > *, .board-head > *, .masthead-inner > *, .colophon-inner > *';
+        const outside = [...document.querySelectorAll(sel)].filter((el) => el.offsetParent).filter((el) => {
+          const r = el.getBoundingClientRect(), c = el.parentElement.getBoundingClientRect();
+          return r.width && (r.left < c.left - 1 || r.right > c.right + 1);
+        }).map((el) => el.textContent.trim().slice(0, 30));
+        return { scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth, outside };
+      });
+      if (found.scroll || found.outside.length) problems.push(`${width}px${wide ? ' wide font' : ''}: scrolls ${found.scroll}px; outside: ${found.outside.join(' | ')}`);
+      assert.deepEqual(page.errors, []);
+      await page.context().close();
+    }
+  }
+  assert.deepEqual(problems, []);
+});
