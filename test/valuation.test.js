@@ -336,3 +336,12 @@ test('when every open spot is a player the user priced, the money left is shared
   assert.equal(sum([...live.prices.values()]), 28);
   assert.ok(live.prices.get('c') > live.prices.get('d'));
 });
+
+test('a minimum of 0 games never values a player on zeros, and rookies keep their draft-slot estimate', () => {
+  const league = { ...YAHOO_DEFAULTS, minGames: 0 };
+  const v = valuePlayers(data.players, league, { rookieHistory: history });
+  assert.equal(v.filter((p) => p.gp === 0 && p.z).length, 0, 'no one with 0 games has category scores');
+  const top = v.find((p) => p.rookie && p.pick === 1);
+  assert.ok(top.estimate && top.value >= 1, `${top.name} is priced from his draft slot`);
+  assert.equal(sum(v.map((p) => p.value)), 2400);
+});

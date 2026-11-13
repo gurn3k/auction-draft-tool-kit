@@ -156,7 +156,10 @@ export function rookieSlotEstimates(history, pool, categories, replacementTotal,
 // Pre-draft values. Returns every eligible player, best first, with per-category
 // z-scores, a total and a dollar value (0 for players outside the rostered pool).
 export function valuePlayers(players, league, { categories = CATEGORIES, myValues = {}, rookieHistory = null } = {}) {
-  const eligible = players.filter((p) => p.gp >= league.minGames);
+  // A player with no games has no per-game stats, only zeros, so even a 0-game
+  // minimum needs at least one game to value him.
+  const minGames = Math.max(1, league.minGames);
+  const eligible = players.filter((p) => p.gp >= minGames);
   const slots = rosterSpots(league);
   // The averages that z-scores compare against should describe the players who
   // actually get drafted, not the whole league, so re-centre on the top of the
@@ -174,10 +177,10 @@ export function valuePlayers(players, league, { categories = CATEGORIES, myValue
   // This year's rookies have no NBA stats. Each gets the average surplus of
   // past rookies from his draft slot (ADR 0012). Those it puts at $0, and
   // undrafted rookies, sit below everyone, still there to be priced by hand.
-  const rookies = players.filter((p) => p.rookie && p.gp < league.minGames).sort((a, b) => (a.pick ?? 99) - (b.pick ?? 99));
+  const rookies = players.filter((p) => p.rookie && !(p.gp >= minGames)).sort((a, b) => (a.pick ?? 99) - (b.pick ?? 99));
   if (rookieHistory?.players?.length && rookies.length) {
     const replacement = replacementTotal;
-    const slotsFor = rookieSlotEstimates(rookieHistory, pool, categories, replacement, league.minGames);
+    const slotsFor = rookieSlotEstimates(rookieHistory, pool, categories, replacement, minGames);
     const estimated = rookies.map((p) => {
       const est = p.pick ? slotsFor.find((s) => p.pick >= s.lo && p.pick <= s.hi) : null;
       return { ...p, total: est?.surplus > 0 ? replacement + est.surplus : -Infinity, ...(est ? { estimate: est } : {}) };
