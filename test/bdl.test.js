@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { aliasesFor, buildPlayers, buildRookieHistory } from '../scripts/bdl.js';
 import { YAHOO_DEFAULTS, valuePlayers } from '../site/lib/valuation.js';
 
@@ -85,4 +89,32 @@ test('recent seasons list games and minutes for the seasons a player appeared in
   const row = (id, gp, min) => ({ player: player(id, 'A', 'B'), stats: { ...stats, gp, min } });
   const [p] = buildPlayers([row(1, 70, 34)], [], { recent: { 2024: [row(1, 40, 31)], 2025: [row(1, 70, 34)] } });
   assert.deepEqual(p.seasons, [[2024, 40, 31], [2025, 70, 34]]);
+});
+
+test('a cached rebuild with a past season missing stops, rather than quietly shrinking the rookie history', () => {
+  // A scratch folder with this season saved but no past seasons, and no API key,
+  // so nothing can be fetched. The data files must be left as they were.
+  const dir = mkdtempSync(join(tmpdir(), 'cap-drafter-'));
+  try {
+    const raw = join(dir, '.scratch/raw/bdl');
+    mkdirSync(raw, { recursive: true });
+    mkdirSync(join(dir, 'site/data'), { recursive: true });
+    mkdirSync(join(dir, 'data'), { recursive: true });
+    writeFileSync(join(raw, 'season-averages-2025-regular.json'), JSON.stringify([{ player: player(1, 'A', 'B'), stats }]));
+    writeFileSync(join(raw, 'active-players.json'), JSON.stringify([]));
+    writeFileSync(join(dir, 'site/data/players.json'), '{"kept":true}');
+    writeFileSync(join(dir, 'site/data/rookie-history.json'), '{"kept":true}');
+    writeFileSync(join(dir, 'data/display-names.json'), '{"names":{}}');
+    writeFileSync(join(dir, 'data/player-notes.json'), '{"notes":{}}');
+    const script = fileURLToPath(new URL('../scripts/fetch-stats.js', import.meta.url));
+    const env = { ...process.env };
+    delete env.BALLDONTLIE_API_KEY;
+    const run = spawnSync(process.execPath, [script, '--cached'], { cwd: dir, env, encoding: 'utf8' });
+    assert.notEqual(run.status, 0);
+    assert.match(run.stderr, /season-averages-2017-regular\.json/);
+    assert.equal(readFileSync(join(dir, 'site/data/rookie-history.json'), 'utf8'), '{"kept":true}');
+    assert.equal(readFileSync(join(dir, 'site/data/players.json'), 'utf8'), '{"kept":true}');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
