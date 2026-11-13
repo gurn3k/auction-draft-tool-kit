@@ -285,3 +285,30 @@ test('unticking the last category is refused with a reason', { skip }, async () 
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
+
+test('the privacy page says what Reset draft really clears, and opens from the app on this site', { skip }, async () => {
+  const page = await open();
+  assert.match(await logPick(page, 'Nikola Jokic', 70, 2), /for \$70/);
+  await page.click('#players-body tr[data-id] td.player');
+  await page.fill('#my-value', '45');
+  await page.press('#my-value', 'Enter');
+  await page.fill('#setup-form [name=budget]', '250');
+  await page.press('#setup-form [name=budget]', 'Tab');
+  await page.click('#reset-draft');
+  // What the app does: the picks go; league settings and My values stay.
+  assert.equal(await page.textContent('#pick-count'), '');
+  assert.match(await page.textContent('#setup-sum'), /\$250 budget/);
+  assert.match(await page.textContent('#my-values-count'), /1 player priced by you/);
+  // What the privacy page says, reached from the app's own footer link.
+  const href = await page.$eval('a[href$="privacy.html"]', (a) => a.href);
+  assert.ok(href.startsWith(base), `${href} is on this site`);
+  await page.goto(href);
+  const stays = await page.textContent('main');
+  assert.match(stays, /values you set yourself/);
+  assert.match(stays, /Reset draft clears the picks and keeps the rest/);
+  assert.doesNotMatch(stays, /or pressing Reset draft, deletes them/);
+  await page.setViewportSize({ width: 360, height: 800 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0);
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
