@@ -1,7 +1,7 @@
 // Draft-room UI. All the maths lives in lib/; this file reads the forms, keeps
 // state in memory (and in localStorage as a convenience) and renders.
 import { CATEGORIES, DURABILITY, YAHOO_DEFAULTS, livePrices, myValueRoom, rosterSpots, shortSeasons, valuePlayers } from './lib/valuation.js';
-import { SCARCE_LEFT, addPick, bidCeiling, categorySupply, categoryTotals, checkPick, newDraft, removePick, scarceStrengths, teamSummaries } from './lib/draft.js';
+import { LEAGUE_LIMITS, SCARCE_LEFT, addPick, bidCeiling, categorySupply, categoryTotals, checkPick, leagueProblem, newDraft, removePick, scarceStrengths, teamSummaries, wholeNumber } from './lib/draft.js';
 import { projectionsFromCsv } from './lib/csv.js';
 import { fitDrivers, fitFactor, fitStrength, needWeights, worthToYou } from './lib/fit.js';
 import { findPlayer } from './lib/match.js';
@@ -131,6 +131,17 @@ function fillSetup() {
   $('csv-status').textContent = state.csv ? `Loaded ${state.csv.players.length} players from ${state.csv.name}.` : 'No file loaded. Columns: name, FGM/FGA (or FG%), FTM/FTA (or FT%), 3PM, PTS, REB, AST, STL, BLK, TO.';
   $('csv-status').classList.remove('error');
   renderMyValuesStatus();
+  showSetupProblem(null);
+}
+
+// A setting that can't be used is refused out loud, under the form, and the
+// field keeps what was typed until it's fixed. The league keeps its last good settings.
+function showSetupProblem(problem) {
+  $('setup-msg').textContent = problem?.message ?? '';
+  for (const k of Object.keys(LEAGUE_LIMITS)) {
+    if (problem?.field === k) form.elements[k].setAttribute('aria-invalid', 'true');
+    else form.elements[k].removeAttribute('aria-invalid');
+  }
 }
 
 function renderMyValuesStatus() {
@@ -146,17 +157,21 @@ function setupSummary() {
 }
 
 function readLeague() {
-  const n = (k) => Math.round(Number(form.elements[k].value));
+  // Whole numbers only: a blank box, "12.5" or "1e1" is refused, not rounded or guessed.
+  const n = (k) => wholeNumber(form.elements[k].value);
   return { teams: n('teams'), budget: n('budget'), rosterSize: n('rosterSize'), minGames: n('minGames'), categories: state.league.categories };
 }
 
-function onLeagueChange() {
+// `quiet` is for the pause while typing: a good value is applied, but a half-typed
+// one isn't flagged until the box is left or Enter is pressed.
+function onLeagueChange({ quiet = false } = {}) {
   const next = readLeague();
-  const ok = next.teams >= 2 && next.teams <= 20 && next.budget >= 1 && next.rosterSize >= 1 && next.rosterSize <= 25 && next.minGames >= 0;
+  const shapeChanged = next.teams !== state.league.teams || next.rosterSize !== state.league.rosterSize;
+  const problem = leagueProblem(next, shapeChanged ? null : state.draft);
+  if (!quiet || !problem) showSetupProblem(problem);
   // A number input also fires "change" on blur. Re-rendering then would swap the
   // table out from under the click that caused the blur, so do nothing if unchanged.
-  if (!ok || JSON.stringify(next) === JSON.stringify(state.league)) return;
-  const shapeChanged = next.teams !== state.league.teams || next.rosterSize !== state.league.rosterSize;
+  if (problem || JSON.stringify(next) === JSON.stringify(state.league)) return;
   if (shapeChanged && state.draft.picks.length) {
     if (!confirm('Changing teams or roster spots starts the draft over. Clear the picks logged so far?')) {
       fillSetup();
@@ -214,7 +229,7 @@ let typing;
 form.addEventListener('input', (e) => {
   if (!['budget', 'minGames'].includes(e.target.name)) return;
   clearTimeout(typing);
-  typing = setTimeout(onLeagueChange, 700);
+  typing = setTimeout(() => onLeagueChange({ quiet: true }), 700);
 });
 
 $('yahoo-defaults').addEventListener('click', () => {

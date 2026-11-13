@@ -22,6 +22,45 @@ export function teamSummaries(draft, league) {
   });
 }
 
+// A count typed in a box (teams, spots, games): digits 0-9 only, or NaN. The
+// browser's number box reads "1e1" as 10 and "12.5" as 12.5, and neither
+// should quietly become a league setting.
+export const wholeNumber = (text) => (/^\s*\d+\s*$/.test(String(text ?? '')) ? Number(text) : NaN);
+
+// The league settings the app accepts. Every team must be able to fill every
+// spot at $1, so the budget is at least the number of roster spots.
+export const LEAGUE_LIMITS = {
+  teams: { min: 2, max: 20, label: 'Teams' },
+  budget: { min: 1, max: 2000, label: 'Budget per team', money: true },
+  rosterSize: { min: 1, max: 25, label: 'Roster spots' },
+  minGames: { min: 0, max: 82, label: 'Minimum games' },
+};
+
+// Why these league settings can't be used, as { field, message }, or null if
+// they're fine. With picks already logged (and teams and spots unchanged), the
+// budget can't drop below what a team has spent plus $1 for each spot it still
+// has to fill.
+export function leagueProblem(league, draft = null) {
+  for (const [field, { min, max, label, money }] of Object.entries(LEAGUE_LIMITS)) {
+    const v = league[field];
+    const lo = field === 'budget' && Number.isInteger(league.rosterSize) ? Math.max(min, league.rosterSize) : min;
+    const unit = money ? '$' : '';
+    if (!Number.isInteger(v) || v < lo || v > max) {
+      const why = field === 'budget' && lo > min ? `, so each team has $1 for each of its ${lo} roster spots` : '';
+      return { field, message: `${label} must be a whole number from ${unit}${lo} to ${unit}${max.toLocaleString('en-US')}${why}.` };
+    }
+  }
+  if (draft?.picks.length && draft.teams.length === league.teams) {
+    for (const t of teamSummaries(draft, league)) {
+      const need = t.spent + Math.max(0, t.open);
+      if (need > league.budget) {
+        return { field: 'budget', message: `${t.name} has already spent $${t.spent} and has ${t.open} spot${t.open === 1 ? '' : 's'} to fill, so the budget can’t go below $${need}.` };
+      }
+    }
+  }
+  return null;
+}
+
 // Returns an error message, or null if the pick is legal.
 export function checkPick(draft, league, { playerId, price, team }) {
   if (!Number.isInteger(price) || price < 1) return 'Price must be a whole number of at least $1.';

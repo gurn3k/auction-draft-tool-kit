@@ -110,3 +110,40 @@ test('the Value column adds up to the league money, and My values that no longer
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
+
+// Types into a League setup box and leaves it, as a person would.
+async function setField(page, name, value) {
+  await page.fill(`#setup-form [name=${name}]`, String(value));
+  await page.press(`#setup-form [name=${name}]`, 'Tab');
+}
+
+test('League setup refuses settings it cannot use, says why, and keeps the last good ones', { skip }, async () => {
+  const page = await open();
+  const summary = () => page.textContent('#setup-sum');
+  assert.equal(await page.textContent('#setup-msg'), '');
+  await setField(page, 'teams', 30);
+  assert.match(await page.textContent('#setup-msg'), /Teams must be a whole number from 2 to 20/);
+  assert.equal(await page.getAttribute('[name=teams]', 'aria-invalid'), 'true');
+  assert.match(await summary(), /12 teams/);
+  await setField(page, 'teams', 2);
+  assert.equal(await page.textContent('#setup-msg'), '');
+  assert.match(await summary(), /2 teams/);
+  await setField(page, 'minGames', '1e1');
+  assert.match(await page.textContent('#setup-msg'), /Minimum games must be a whole number/);
+  await setField(page, 'minGames', 15);
+  await setField(page, 'budget', 1);
+  assert.match(await page.textContent('#setup-msg'), /Budget per team must be a whole number from \$13 to \$2,000/);
+  assert.match(await summary(), /\$200 budget/);
+  assert.doesNotMatch(await page.textContent('#t-max'), /-/);
+  // With a pick logged, the budget can't fall below what that team needs.
+  await setField(page, 'budget', 200);
+  assert.match(await logPick(page, 'Nikola Jokic', 150, 1), /for \$150/);
+  await setField(page, 'budget', 100);
+  assert.match(await page.textContent('#setup-msg'), /Team 2 has already spent \$150 and has 12 spots to fill, so the budget can’t go below \$162/);
+  assert.match(await summary(), /\$200 budget/);
+  await setField(page, 'budget', 162);
+  assert.equal(await page.textContent('#setup-msg'), '');
+  assert.match(await summary(), /\$162 budget/);
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
