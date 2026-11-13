@@ -118,3 +118,18 @@ test('a cached rebuild with a past season missing stops, rather than quietly shr
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('the README quotes the values the app shows with Yahoo defaults', () => {
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const claim = readme.match(/Nikola Jokić \$(\d+), Victor Wembanyama \$(\d+), Shai Gilgeous-Alexander \$(\d+), and (\d+) players priced at exactly \$([\d,]+)/);
+  assert.ok(claim, 'the README states the top three values and the total');
+  const data = JSON.parse(readFileSync(new URL('../site/data/players.json', import.meta.url), 'utf8'));
+  const rookieHistory = JSON.parse(readFileSync(new URL('../site/data/rookie-history.json', import.meta.url), 'utf8'));
+  // As the app values them: bundled stats with rookie estimates.
+  const v = valuePlayers(data.players, YAHOO_DEFAULTS, { rookieHistory });
+  const at = (name) => v.find((p) => p.name === name).value;
+  assert.deepEqual(claim.slice(1, 4).map(Number), [at('Nikola Jokic'), at('Victor Wembanyama'), at('Shai Gilgeous-Alexander')]);
+  const priced = v.filter((p) => p.value > 0);
+  assert.equal(Number(claim[4]), priced.length);
+  assert.equal(Number(claim[5].replace(/,/g, '')), priced.reduce((a, p) => a + p.value, 0));
+});
